@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 def test_elastic_calc(
     Li2O: Structure,
     matpes_calculator: PESCalculator,
-    relax_deformed_structures: bool,  # noqa: FBT001
+    relax_deformed_structures: bool,
 ) -> None:
     """Tests for ElasticCalc class"""
     elast_calc = ElasticityCalc(
