@@ -16,6 +16,11 @@ on:
         description: Trigger test manually.
   workflow_call: # make this workflow reusable by release.yml
 
+# Lock GITHUB_TOKEN to read-only by default. Individual jobs can opt in to
+# extra scopes via their own ``permissions`` block if ever needed.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
