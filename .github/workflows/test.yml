@@ -46,3 +46,59 @@ jobs:
         uses: codecov/codecov-action@v5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Per-architecture smoke tests for the unified-name foundation potential
+  # registry in matcalc.utils. Each job installs only its own provider stack
+  # so the matrix shards stay light and a single broken provider does not
+  # block the others.
+  test-fp-loaders:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: matgl
+            extras: matgl
+            models: '["TensorNet-MatPES-PBE-2025.2", "TensorNet-MatPES-r2SCAN-2025.2", "M3GNet-MatPES-PBE-2025.1"]'
+          - name: mace
+            extras: mace
+            models: '["MACE-MP-0-small", "MACE-MPA-0-medium", "MACE-MatPES-PBE-0"]'
+          - name: grace
+            extras: tensorpotential
+            models: '["GRACE-2L-OAM"]'
+    env:
+      PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install matcalc + ${{ matrix.name }} provider
+        run: |
+          python -m pip install --upgrade pip
+          if [ "${{ matrix.name }}" = "matgl" ]; then
+            pip install dgl==2.4.0 -f https://data.dgl.ai/wheels/torch-2.4/repo.html
+            pip install -e '.[matgl]'
+          elif [ "${{ matrix.name }}" = "mace" ]; then
+            pip install -e '.' mace-torch
+          elif [ "${{ matrix.name }}" = "grace" ]; then
+            pip install -e '.' tensorpotential
+          fi
+
+      - name: Load each canonical model
+        run: |
+          python - <<'PY'
+          import json, os
+          from matcalc import load_fp
+          from ase.calculators.calculator import Calculator
+          for name in json.loads(os.environ["MODELS"]):
+              calc = load_fp(name)
+              assert isinstance(calc, Calculator), f"{name}: got {type(calc)}"
+              print(f"OK: {name} -> {type(calc).__name__}")
+          PY
+        env:
+          MODELS: ${{ matrix.models }}

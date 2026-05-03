@@ -21,52 +21,123 @@ if TYPE_CHECKING:
     from pymatgen.core import IMolecule, IStructure
 
 
-# Listing of supported universal calculators.
-# If you update UNIVERSAL_CALCULATORS, you must also update the mapping in
-# map_calculators_to_packages in test_utils.py, unless already covered.
-
-_universal_calculators = [
-    "M3GNet",
-    "CHGNet",
-    "MACE",
-    "SevenNet",
-    "TensorNet",
-    "GRACE",
-    "TensorPotential",
-    "ORB",
-    "PBE",
-    "r2SCAN",
-    "MatterSim",
-    "FAIRChem",
-    "PETMAD",
-    "DeePMD",
-]
-
-try:
-    # Auto-load all available PES models from matgl if installed.
-    import matgl
-
-    _universal_calculators += [
-        m for m in matgl.get_available_pretrained_models() if "PES" in m and "ANI-1x-Subset-PES" not in m
-    ]
-    _universal_calculators = sorted(set(_universal_calculators))
-except Exception:  # noqa: BLE001
-    warnings.warn("Unable to get pre-trained MatGL universal calculators.", stacklevel=1)
-
-# Provide simple aliases for some common models. The key in MODEL_ALIASES must be lower case.
-MODEL_ALIASES = {
-    "tensornet": "TensorNet-PES-MatPES-PBE-2025.2",
-    "m3gnet": "M3GNet-PES-MatPES-PBE-2025.1",
-    "chgnet": "CHGNet-PES-MatPES-PBE-2025.1",
-    "pbe": "TensorNet-PES-MatPES-PBE-2025.2",
-    "r2scan": "TensorNet-PES-MatPES-r2SCAN-2025.2",
+# Unified naming convention for foundation potentials:
+#
+#     <Architecture>-<Dataset>-<Optional Version>
+#
+# e.g. ``TensorNet-MatPES-PBE-2025.2`` or ``MACE-MPA-0-medium``. Each entry in
+# ``MODEL_REGISTRY`` maps a canonical name to a provider and the provider-specific
+# kwargs used to materialise the calculator. Users select a model by its canonical
+# name; ``MODEL_ALIASES`` provides short / legacy spellings that resolve to a
+# canonical name.
+#
+# To add a new model, append an entry here. The ``provider`` key picks the loader
+# branch in ``PESCalculator.load_universal``; remaining keys are forwarded to that
+# loader (user kwargs to ``load_universal`` override these defaults).
+MODEL_REGISTRY: dict[str, dict[str, Any]] = {
+    # MatGL — TensorNet on MatPES
+    "TensorNet-MatPES-PBE-2025.2": {"provider": "matgl", "path": "TensorNet-PES-MatPES-PBE-2025.2"},
+    "TensorNet-MatPES-r2SCAN-2025.2": {"provider": "matgl", "path": "TensorNet-PES-MatPES-r2SCAN-2025.2"},
+    # MatGL — M3GNet
+    "M3GNet-MatPES-PBE-2025.1": {"provider": "matgl", "path": "M3GNet-PES-MatPES-PBE-2025.1"},
+    # MatGL — CHGNet
+    "CHGNet-MatPES-PBE-2025.2.10": {"provider": "matgl", "path": "CHGNet-PES-MatPES-PBE-2025.2.10"},
+    "CHGNet-MatPES-r2SCAN-2025.2.10": {"provider": "matgl", "path": "CHGNet-PES-MatPES-r2SCAN-2025.2.10"},
+    "CHGNet-MatPES-PBE-2025.2.10-2.7M": {"provider": "matgl", "path": "CHGNet-MatPES-PBE-2025.2.10-2.7M-PES"},
+    "CHGNet-MPtrj-2023.12.1-2.7M": {"provider": "matgl", "path": "CHGNet-MPtrj-2023.12.1-2.7M-PES"},
+    "CHGNet-MPtrj-2024.2.13-11M": {"provider": "matgl", "path": "CHGNet-MPtrj-2024.2.13-11M-PES"},
+    # MACE foundation models (mace-foundations release names)
+    "MACE-MP-0-small": {"provider": "mace_mp", "model": "small"},
+    "MACE-MP-0-medium": {"provider": "mace_mp", "model": "medium"},
+    "MACE-MP-0-large": {"provider": "mace_mp", "model": "large"},
+    "MACE-MP-0b-small": {"provider": "mace_mp", "model": "small-0b"},
+    "MACE-MP-0b-medium": {"provider": "mace_mp", "model": "medium-0b"},
+    "MACE-MP-0b2-small": {"provider": "mace_mp", "model": "small-0b2"},
+    "MACE-MP-0b2-medium": {"provider": "mace_mp", "model": "medium-0b2"},
+    "MACE-MP-0b2-large": {"provider": "mace_mp", "model": "large-0b2"},
+    "MACE-MP-0b3-medium": {"provider": "mace_mp", "model": "medium-0b3"},
+    "MACE-MPA-0-medium": {"provider": "mace_mp", "model": "medium-mpa-0"},
+    "MACE-OMAT-0-small": {"provider": "mace_mp", "model": "small-omat-0"},
+    "MACE-OMAT-0-medium": {"provider": "mace_mp", "model": "medium-omat-0"},
+    "MACE-MatPES-PBE-0": {"provider": "mace_mp", "model": "mace-matpes-pbe-0"},
+    "MACE-MatPES-r2SCAN-0": {"provider": "mace_mp", "model": "mace-matpes-r2scan-0"},
+    # NOTE: MACE multi-head checkpoints (mh-0, mh-1) require a mandatory ``head=...``
+    # kwarg per use; they are not registered as default-loadable canonical names.
+    # SevenNet (model names match the upstream HF / SevenNetCalculator strings)
+    "SevenNet-0": {"provider": "sevennet", "model": "7net-0"},
+    "SevenNet-l3i5": {"provider": "sevennet", "model": "7net-l3i5"},
+    "SevenNet-MF-OMPA": {"provider": "sevennet", "model": "7net-mf-ompa"},
+    "SevenNet-OMAT": {"provider": "sevennet", "model": "7net-omat"},
+    # GRACE / TensorPotential
+    "GRACE-1L-OAM": {"provider": "grace", "model": "GRACE-1L-OAM"},
+    "GRACE-2L-OAM": {"provider": "grace", "model": "GRACE-2L-OAM"},
+    "GRACE-2L-OMAT": {"provider": "grace", "model": "GRACE-2L-OMAT"},
+    "GRACE-2L-MPtrj": {"provider": "grace", "model": "GRACE-2L-MPtrj"},
+    # Orb
+    "ORB-v2": {"provider": "orb", "model": "orb-v2"},
+    "ORB-d3-v2": {"provider": "orb", "model": "orb-d3-v2"},
+    "ORB-d3-sm-v2": {"provider": "orb", "model": "orb-d3-sm-v2"},
+    "ORB-d3-xs-v2": {"provider": "orb", "model": "orb-d3-xs-v2"},
+    # MatterSim
+    "MatterSim-v1.0.0-1M": {"provider": "mattersim", "load_path": "MatterSim-v1.0.0-1M.pth"},
+    "MatterSim-v1.0.0-5M": {"provider": "mattersim", "load_path": "MatterSim-v1.0.0-5M.pth"},
+    # FAIRChem (UMA family)
+    "UMA-S-1": {"provider": "fairchem", "model": "uma-s-1", "task_name": "omat"},
+    "UMA-M-1": {"provider": "fairchem", "model": "uma-m-1", "task_name": "omat"},
+    # PET-MAD
+    "PETMAD-1.0.0": {"provider": "petmad"},
+    # DeePMD-LAM
+    "DPA3-LAM-2025.3.14": {"provider": "deepmd"},
 }
 
+# Short / legacy aliases. Keys are matched case-insensitively. Values must be
+# canonical names from ``MODEL_REGISTRY``.
+MODEL_ALIASES: dict[str, str] = {
+    # short architecture / functional aliases — pick a sensible default per family
+    "tensornet": "TensorNet-MatPES-PBE-2025.2",
+    "m3gnet": "M3GNet-MatPES-PBE-2025.1",
+    "chgnet": "CHGNet-MatPES-PBE-2025.2.10",
+    "pbe": "TensorNet-MatPES-PBE-2025.2",
+    "r2scan": "TensorNet-MatPES-r2SCAN-2025.2",
+    "mace": "MACE-MPA-0-medium",
+    "sevennet": "SevenNet-0",
+    "grace": "GRACE-2L-OAM",
+    "tensorpotential": "GRACE-2L-OAM",
+    "orb": "ORB-v2",
+    "mattersim": "MatterSim-v1.0.0-1M",
+    "fairchem": "UMA-S-1",
+    "uma": "UMA-S-1",
+    "petmad": "PETMAD-1.0.0",
+    "deepmd": "DPA3-LAM-2025.3.14",
+    # legacy MatGL spellings — keep working so existing code/notebooks don't break
+    "tensornet-pes-matpes-pbe-2025.2": "TensorNet-MatPES-PBE-2025.2",
+    "tensornet-pes-matpes-r2scan-2025.2": "TensorNet-MatPES-r2SCAN-2025.2",
+    "m3gnet-pes-matpes-pbe-2025.1": "M3GNet-MatPES-PBE-2025.1",
+    "chgnet-pes-matpes-pbe-2025.2.10": "CHGNet-MatPES-PBE-2025.2.10",
+    "chgnet-pes-matpes-r2scan-2025.2.10": "CHGNet-MatPES-r2SCAN-2025.2.10",
+    "chgnet-matpes-pbe-2025.2.10-2.7m-pes": "CHGNet-MatPES-PBE-2025.2.10-2.7M",
+    "chgnet-mptrj-2023.12.1-2.7m-pes": "CHGNet-MPtrj-2023.12.1-2.7M",
+    "chgnet-mptrj-2024.2.13-11m-pes": "CHGNet-MPtrj-2024.2.13-11M",
+}
 
-UNIVERSAL_CALCULATORS = Enum("UNIVERSAL_CALCULATORS", {k: k for k in _universal_calculators})  # type: ignore[misc]
+try:
+    # Set of raw MatGL pretrained PES names. Used as a backward-compat escape hatch
+    # in ``load_universal`` for matgl models not yet registered as canonical names.
+    import matgl
+
+    _MATGL_AVAILABLE: set[str] = {
+        m for m in matgl.get_available_pretrained_models() if "PES" in m and "ANI-1x-Subset-PES" not in m
+    }
+except Exception:  # noqa: BLE001
+    warnings.warn("Unable to query pre-trained MatGL universal calculators.", stacklevel=1)
+    _MATGL_AVAILABLE = set()
+
+UNIVERSAL_CALCULATORS = Enum(  # type: ignore[misc]
+    "UNIVERSAL_CALCULATORS", {k: k for k in sorted(MODEL_REGISTRY)}
+)
 
 # Same strings as enum values; exposed for typing-friendly iteration (e.g. CLI choices).
-UNIVERSAL_CALCULATOR_NAMES: tuple[str, ...] = tuple(_universal_calculators)
+UNIVERSAL_CALCULATOR_NAMES: tuple[str, ...] = tuple(sorted(MODEL_REGISTRY))
 
 
 class PESCalculator(Calculator):
@@ -344,96 +415,107 @@ class PESCalculator(Calculator):
         return DP(model=model_path, **kwargs)
 
     @staticmethod
-    def load_universal(name: str | Calculator, **kwargs: Any) -> Calculator:  # noqa: C901
+    def load_universal(name: str | Calculator, **kwargs: Any) -> Calculator:  # noqa: C901, PLR0911
         """
-        Loads a calculator instance based on the provided name or an existing calculator object. The
-        method supports multiple pre-built universal models and aliases for ease of use. If an existing calculator
-        object is passed instead of a name, it will directly return that calculator instance. Supported FPs
-        include SOTA potentials such as M3GNet, CHGNet, TensorNet, MACE, GRACE, SevenNet, ORB, etc.
+        Load a foundation potential calculator by its canonical name.
 
-        This method is designed to provide a universal interface to load various calculator types, which
-        may belong to different domains and packages. It auto-resolves aliases, provides default options
-        for certain calculators, and raises errors for unsupported inputs.
+        Names follow the unified convention ``<Architecture>-<Dataset>-<Optional Version>``
+        (e.g. ``TensorNet-MatPES-PBE-2025.2``, ``MACE-MPA-0-medium``). The full list of
+        canonical names is the keys of :data:`MODEL_REGISTRY`; short / legacy spellings
+        in :data:`MODEL_ALIASES` resolve to a canonical name.
+
+        If ``name`` is already a :class:`Calculator`, it is returned unchanged.
 
         Args:
-            name: Model name, alias, or an existing ASE calculator instance.
-            **kwargs: Model-specific options passed to the underlying loader.
+            name: Canonical model name, alias, or an existing ASE calculator instance.
+            **kwargs: Provider-specific options. These override the defaults stored
+                in the registry entry (e.g. ``device="cuda"`` for ORB / FAIRChem).
 
         Returns:
-            ASE calculator instance.
+            An ASE :class:`Calculator` instance.
 
         Raises:
-            ValueError: If ``name`` is not a recognized universal model.
+            ValueError: If ``name`` is not a recognized model.
         """
-        result: Calculator
+        if not isinstance(name, str):  # already an ASE Calculator
+            return name
 
-        if not isinstance(name, str):  # e.g. already an ase Calculator instance
-            result = name
+        canonical = MODEL_ALIASES.get(name.lower(), name)
+        spec = MODEL_REGISTRY.get(canonical)
 
-        elif any(name.lower().startswith(m) for m in ("m3gnet", "chgnet", "tensornet", "pbe", "r2scan")):
-            name = MODEL_ALIASES.get(name.lower(), name)
-            result = PESCalculator.load_matgl(name, **kwargs)
+        if spec is None:
+            # Backward-compat fallback: a raw MatGL pretrained model name passed
+            # straight through (covers any newly released models not yet in the
+            # registry) so users on the bleeding edge are not blocked.
+            if canonical in _MATGL_AVAILABLE:
+                return PESCalculator.load_matgl(canonical, **kwargs)
+            raise ValueError(
+                f"Unrecognized {name=}, must be one of {sorted(MODEL_REGISTRY)} "
+                f"(or a short alias in {sorted(MODEL_ALIASES)})."
+            )
 
-        elif name.lower() == "mace":
+        provider_kwargs = {k: v for k, v in spec.items() if k != "provider"}
+        provider_kwargs.update(kwargs)  # user kwargs win over registry defaults
+        provider = spec["provider"]
+
+        if provider == "matgl":
+            path = provider_kwargs.pop("path")
+            return PESCalculator.load_matgl(path, **provider_kwargs)
+
+        if provider == "mace_mp":
             from mace.calculators import mace_mp
 
-            result = mace_mp(**kwargs)
+            return mace_mp(**provider_kwargs)
 
-        elif name.lower() == "sevennet":
+        if provider == "sevennet":
             from sevenn.calculator import SevenNetCalculator
 
-            result = SevenNetCalculator(**kwargs)
+            return SevenNetCalculator(**provider_kwargs)
 
-        elif name.lower() == "grace" or name.lower() == "tensorpotential":
+        if provider == "grace":
             from tensorpotential.calculator.foundation_models import grace_fm
 
-            kwargs.setdefault("model", "GRACE-2L-OAM")
-            result = grace_fm(**kwargs)
+            return grace_fm(**provider_kwargs)
 
-        elif name.lower() == "orb":
+        if provider == "orb":
             from orb_models.forcefield.calculator import ORBCalculator
             from orb_models.forcefield.pretrained import ORB_PRETRAINED_MODELS
 
-            model = kwargs.pop("model", "orb-v2")
-            device = kwargs.get("device", "cpu")
-
+            model = provider_kwargs.pop("model")
+            device = provider_kwargs.get("device", "cpu")
             orbff = ORB_PRETRAINED_MODELS[model](device=device)
-            result = ORBCalculator(orbff, **kwargs)
+            return ORBCalculator(orbff, **provider_kwargs)
 
-        elif name.lower() == "mattersim":  # pragma: no cover
+        if provider == "mattersim":  # pragma: no cover
             from mattersim.forcefield import MatterSimCalculator
 
-            result = MatterSimCalculator(**kwargs)
+            return MatterSimCalculator(**provider_kwargs)
 
-        elif name.lower() == "fairchem":  # pragma: no cover
+        if provider == "fairchem":  # pragma: no cover
             from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
-            device = kwargs.pop("device", "cpu")
-            model = kwargs.pop("model", "uma-s-1")
-            task_name = kwargs.pop("task_name", "omat")
+            device = provider_kwargs.pop("device", "cpu")
+            model = provider_kwargs.pop("model")
+            task_name = provider_kwargs.pop("task_name")
             predictor = pretrained_mlip.get_predict_unit(model, device=device)
-            result = FAIRChemCalculator(predictor, task_name=task_name, **kwargs)
+            return FAIRChemCalculator(predictor, task_name=task_name, **provider_kwargs)
 
-        elif name.lower() == "petmad":  # pragma: no cover
+        if provider == "petmad":  # pragma: no cover
             from pet_mad.calculator import PETMADCalculator
 
-            result = PETMADCalculator(**kwargs)
+            return PETMADCalculator(**provider_kwargs)
 
-        elif name.lower().startswith("deepmd"):  # pragma: no cover
+        if provider == "deepmd":  # pragma: no cover
             from pathlib import Path
 
             from deepmd.calculator import DP
 
             cwd = Path(__file__).parent.absolute()
-            model_path = cwd / "../../tests/pes/DPA3-LAM-2025.3.14-PES" / "2025-03-14-dpa3-openlam.pth"
-            model_path = model_path.resolve()
-            kwargs.setdefault("model", model_path)
-            result = DP(**kwargs)
+            model_path = (cwd / "../../tests/pes/DPA3-LAM-2025.3.14-PES" / "2025-03-14-dpa3-openlam.pth").resolve()
+            provider_kwargs.setdefault("model", model_path)
+            return DP(**provider_kwargs)
 
-        else:
-            raise ValueError(f"Unrecognized {name=}, must be one of {UNIVERSAL_CALCULATORS}")
-
-        return result
+        raise ValueError(f"Unknown provider {provider!r} for model {canonical!r}.")
 
 
 def to_ase_atoms(structure: Atoms | Structure | Molecule) -> Atoms:

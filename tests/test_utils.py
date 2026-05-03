@@ -24,25 +24,23 @@ if TYPE_CHECKING:
 UNIVERSAL_CALCULATORS = [
     calc
     for calc in UNIVERSAL_CALCULATORS
-    if "DGL" not in calc.name
-    and "M3GNet" not in calc.name
-    and "CHGNet" not in calc.name
-    and "ANI-1x-Subset-PES" not in calc.name
-    and "QET" not in calc.name
+    # MatGL DGL backend / M3GNet / CHGNet are intentionally excluded from the
+    # parametrized smoke test (covered separately or skipped due to runtime).
+    if "DGL" not in calc.name and "M3GNet" not in calc.name and "CHGNet" not in calc.name
 ]
 
 
-def _map_calculators_to_packages(calculators: UNIVERSAL_CALCULATORS) -> dict[str, str]:  # Think
+def _map_calculators_to_packages(calculators: list) -> dict[str, str]:
     prefix_package_map: list[tuple[tuple[str, ...], str]] = [
-        (("tensornet", "pbe", "r2scan"), "matgl"),
+        (("tensornet", "m3gnet", "chgnet"), "matgl"),
         (("mace",), "mace"),
         (("sevennet",), "sevenn"),
-        (("grace", "tensorpotential"), "tensorpotential"),
+        (("grace",), "tensorpotential"),
         (("orb",), "orb_models"),
         (("mattersim",), "mattersim"),
-        (("fairchem",), "fairchem"),
+        (("uma",), "fairchem"),
         (("petmad",), "pet_mad"),
-        (("deepmd",), "deepmd"),
+        (("dpa", "deepmd"), "deepmd"),
     ]
 
     calculator_to_package: dict[str, str] = {}
@@ -177,9 +175,8 @@ def test_pescalculator_calculate() -> None:
 
 
 def test_aliases() -> None:
-    # Ensures that model aliases always point to valid models.
-    names = [u.name for u in UNIVERSAL_CALCULATORS]
+    # Every alias must resolve to a canonical name in the registry.
+    from matcalc.utils import MODEL_REGISTRY
+
     for v in MODEL_ALIASES.values():
-        # We are not testing DGL based models.
-        if "M3GNet" not in v and "CHGNet" not in v:
-            assert v in names
+        assert v in MODEL_REGISTRY, f"Alias target {v!r} is not a canonical model name."
