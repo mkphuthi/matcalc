@@ -266,7 +266,7 @@ using MatCalc to quickly obtain material properties.
 Think of a model as **architecture + training data**, and pick the dataset first — it usually matters more than the
 architecture. We currently recommend three:
 
-- **MatPES** (PBE or r²SCAN) for solids
+- **MatPES** (PBE or r2SCAN) for solids
 - **OMat24** for solids where rattled-structure coverage matters (e.g. phonons)
 - **OMol25** for molecules
 
@@ -274,22 +274,22 @@ Most other public models are trained on **MPTrj**, which is noisy and outdated; 
 website provides head-to-head benchmarks between MatPES and OMat24 to help you choose.
 
 **MatPES** uses the latest pseudopotentials with tight energy and force convergence, and is also available at the
-**r²SCAN** level. MatPES-trained models tend to be the most stable and give excellent property predictions across the
+**r2SCAN** level. MatPES-trained models tend to be the most stable and give excellent property predictions across the
 board. The main caveat is the absence of a Hubbard U, so PBE-trained MatPES models can be off for oxidation-state
-energies, voltages, and similar quantities — the r²SCAN variant largely addresses this.
+energies, voltages, and similar quantities — the r2SCAN variant largely addresses this.
 
 **OMat24** suffers from PBE / PBE+U discontinuities and looser convergence criteria, but its rattled structures tend to
 yield slightly better phonons and phonon-derived properties.
 
 Once the dataset is fixed, there is little to separate the architectures. We default to **TensorNet** for its parameter
-efficiency and speed; **GRACE** and **MACE** are also excellent choices, and all three have MatPES-trained checkpoints
+efficiency and speed; **GRACE** and **MACE** are also excellent choices. TensorNet and MACE have MatPES-trained checkpoints
 available via `matcalc.load_fp`.
 
 There is no substitute for benchmarking on the property you actually care about — MatCalc is built to make that easy.
 
 ## Citing
 
-A manuscript on `matcalc` is currently in the works. In the meantime, please see [`citation.cff`](citation.cff) or the GitHub
+A manuscript on `MatCalc` is currently in the works. In the meantime, please see [`citation.cff`](citation.cff) or the GitHub
 sidebar for a BibTeX and APA citation.
 
 [MAML]: https://materialyzeai.github.io/maml/
