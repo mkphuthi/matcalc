@@ -55,7 +55,8 @@ jobs:
   # Per-architecture smoke tests for the unified-name foundation potential
   # registry in matcalc.utils. Each job installs only its own provider stack
   # so the matrix shards stay light and a single broken provider does not
-  # block the others.
+  # block the others. Note that we are testing only the more widely used models.
+  # We will rely on the community to maintain the other models in the registry.
   test-fp-loaders:
     runs-on: ubuntu-latest
     strategy:
