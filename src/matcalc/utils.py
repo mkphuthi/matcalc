@@ -81,9 +81,11 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     # MatterSim
     "MatterSim-v1.0.0-1M": {"provider": "mattersim", "load_path": "MatterSim-v1.0.0-1M.pth"},
     "MatterSim-v1.0.0-5M": {"provider": "mattersim", "load_path": "MatterSim-v1.0.0-5M.pth"},
-    # FAIRChem (UMA family)
-    "UMA-S-1": {"provider": "fairchem", "model": "uma-s-1", "task_name": "omat"},
-    "UMA-M-1": {"provider": "fairchem", "model": "uma-m-1", "task_name": "omat"},
+    # FAIRChem (UMA family) — upstream uses ``uma-s-1p2`` style; we expose them
+    # under the unified ``<Arch>-<Size>-<Version>`` form.
+    "UMA-S-1.2": {"provider": "fairchem", "model": "uma-s-1p2", "task_name": "omat"},
+    "UMA-S-1.1": {"provider": "fairchem", "model": "uma-s-1p1", "task_name": "omat"},
+    "UMA-M-1.1": {"provider": "fairchem", "model": "uma-m-1p1", "task_name": "omat"},
     # PET-MAD
     "PETMAD-1.0.0": {"provider": "petmad"},
     # DeePMD-LAM
@@ -105,8 +107,8 @@ MODEL_ALIASES: dict[str, str] = {
     "tensorpotential": "GRACE-2L-OAM",
     "orb": "ORB-v2",
     "mattersim": "MatterSim-v1.0.0-1M",
-    "fairchem": "UMA-S-1",
-    "uma": "UMA-S-1",
+    "fairchem": "UMA-S-1.2",
+    "uma": "UMA-S-1.2",
     "petmad": "PETMAD-1.0.0",
     "deepmd": "DPA3-LAM-2025.3.14",
     # legacy MatGL spellings — keep working so existing code/notebooks don't break

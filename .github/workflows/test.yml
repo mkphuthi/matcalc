@@ -73,7 +73,7 @@ jobs:
             models: '["GRACE-2L-OAM"]'
           - name: uma
             extras: fairchem-core
-            models: '["UMA-S-1"]'
+            models: '["UMA-S-1.2"]'
     env:
       PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION: python
 
