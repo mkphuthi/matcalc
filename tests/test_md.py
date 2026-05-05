@@ -27,17 +27,17 @@ def _set_seed() -> None:
 @pytest.mark.parametrize(
     ("ensemble", "expected_energy"),
     [
-        ("nve", -10.585068948632792),
-        ("nvt", -10.573131415356976),
-        ("nvt_berendsen", -10.585859430696043),
-        ("nvt_langevin", -10.539638997522172),
-        ("nvt_andersen", -10.593524902060441),
-        ("nvt_bussi", -10.538497767305778),
-        ("npt_inhomogeneous", -10.587772892938327),
-        ("npt_berendsen", -10.566610902894368),
-        ("npt_nose_hoover", -10.542476644421331),
-        ("npt_isotropic_mtk", -10.567787082355974),
-        ("npt_mtk", -10.59909077098931),
+        ("nve", -10.681398645973719),
+        ("nvt", -10.669462076229149),
+        ("nvt_berendsen", -10.682300543040231),
+        ("nvt_langevin", -10.636199534575727),
+        ("nvt_andersen", -10.689862392797687),
+        ("nvt_bussi", -10.634646418536288),
+        ("npt_inhomogeneous", -10.684206021309203),
+        ("npt_berendsen", -10.663122054639796),
+        ("npt_nose_hoover", -10.639228676099112),
+        ("npt_isotropic_mtk", -10.664155796043316),
+        ("npt_mtk", -10.695427268514504),
     ],
 )
 def test_md_calc(

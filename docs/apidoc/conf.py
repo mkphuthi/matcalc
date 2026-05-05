@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys
 
-from matcalc import __file__, __version__
+from matcalc import __version__
 
 project = "matcalc"
 copyright = "2023, Materialyze AI"
@@ -345,10 +345,12 @@ def linkcode_resolve(domain, info):
         import inspect
         import os
 
+        import matcalc
+
         fn = inspect.getsourcefile(obj)
         if not fn:
             raise FileNotFoundError(f"Can't find file for {obj}")
-        fn = os.path.relpath(fn, start=os.path.dirname(__file__))
+        fn = os.path.relpath(fn, start=os.path.dirname(matcalc.__file__))
         source, lineno = inspect.getsourcelines(obj)
         return fn, lineno, lineno + len(source) - 1
 

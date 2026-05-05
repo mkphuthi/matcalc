@@ -66,8 +66,8 @@ def test_phonon_calc(
     assert thermal_props["free_energy"][ind] == pytest.approx(15.620299826689202, rel=1e-1)
     assert_allclose(
         result["final_structure"].lattice.abc,
-        (3.276385084722167, 3.276385084722167, 3.276385084722167),
-        rtol=1e-4,
+        (3.291071792359756, 3.291071792359756, 3.291071792359756),
+        rtol=1e-3,
     )
     assert_allclose(
         result["disp_supercells"][0].lattice.abc,

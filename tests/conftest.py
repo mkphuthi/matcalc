@@ -67,7 +67,7 @@ def Si_atoms() -> Atoms:
 @pytest.fixture(scope="session")
 def matpes_calculator() -> PESCalculator:
     """TensorNet calculator as session-scoped fixture."""
-    return matcalc.load_fp("TensorNet-PES-MatPES-PBE-2025.2")
+    return matcalc.load_fp("TensorNet-MatPES-PBE-2025.2")
 
 
 @pytest.fixture(autouse=True)
