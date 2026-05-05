@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -96,6 +97,7 @@ def test_pescalculator_load_nnp() -> None:
 
 
 @pytest.mark.skipif(not find_spec("maml"), reason="maml is not installed")
+@pytest.mark.skipif(not shutil.which("lmp"), reason="lammps (lmp) executable is not on PATH")
 def test_pescalculator_load_snap() -> None:
     for name in ("SNAP", "qSNAP"):
         calc = PESCalculator.load_snap(
