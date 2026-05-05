@@ -257,7 +257,7 @@ def test_relax_calc_perturb_distance(
 def test_relax_calc_fix_atoms(
     Li2O: Structure,
     matpes_calculator: PESCalculator,
-    fix_atoms: bool | list[int],  # noqa: FBT001
+    fix_atoms: bool | list[int],
     fixed_indices: list[int],
 ) -> None:
     structure = Li2O.copy()
