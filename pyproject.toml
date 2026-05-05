@@ -191,7 +191,7 @@ docstring-code-format = true
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tasks.py" = ["ANN", "D", "T203", "T201", "BLE001", "S"]
-"tests/*" = ["D", "INP001", "N802", "N803", "PLR2004", "S101"]
+"tests/*" = ["D", "FBT001", "INP001", "N802", "N803", "PLR2004", "S101"]
 "tests/test_cli.py" = ["S603", "S607"]
 
 [tool.pytest.ini_options]

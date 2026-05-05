@@ -7,6 +7,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+import phonopy
 import pytest
 from numpy.testing import assert_allclose
 
@@ -135,9 +136,21 @@ def test_qha_calc(
     assert result["volumes"][0] < result["volumes"][-1]
     assert result["temperatures"][0] < result["temperatures"][-1]
 
+    # Regression #150: all temperature-indexed output arrays must have the same length
+    n_temps = len(result["temperatures"])
+    assert len(result["gibbs_free_energies"]) == n_temps
+    assert len(result["thermal_expansion_coefficients"]) == n_temps
+    assert len(result["bulk_modulus_P"]) == n_temps
+    assert len(result["heat_capacity_P"]) == n_temps
+    assert len(result["gruneisen_parameters"]) == n_temps
+
+    # Only count the 8 QHA-output write_* params, not write_ha_phonon
     qha_calc_params = inspect.signature(QHACalc).parameters
-    # get all keywords starting with write_ and their default values
-    file_write_defaults = {key: val.default for key, val in qha_calc_params.items() if key.startswith("write_")}
+    file_write_defaults = {
+        key: val.default
+        for key, val in qha_calc_params.items()
+        if key.startswith("write_") and key != "write_ha_phonon"
+    }
     assert len(file_write_defaults) == 8
 
     for keyword, default_path in file_write_defaults.items():
@@ -197,19 +210,20 @@ def test_qha_pressure(
     assert result["gibbs_free_energies"][ind] == pytest.approx(-12.604636683826666, rel=1e-1)
 
 
+@pytest.mark.parametrize("relax_structure", [True, False])
 def test_qha_calc_atoms(
     Si_atoms: Atoms,
     matpes_calculator: PESCalculator,
+    relax_structure: bool,
 ) -> None:
-    """Tests for QHACalc class."""
-
-    # Initialize QHACalc
+    """Tests QHACalc with ASE Atoms input; relax_structure=False is regression #152."""
     qha_calc = QHACalc(
         calculator=matpes_calculator,
         t_step=50,
         t_max=1000,
         scale_factors=[0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03],
         fmax=0.1,
+        relax_structure=relax_structure,
         phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
     )
 
@@ -218,6 +232,8 @@ def test_qha_calc_atoms(
     # Test values at 300 K
     ind = result["temperatures"].tolist().index(300)
     assert result["thermal_expansion_coefficients"][ind] == pytest.approx(1.184e-06, rel=2e-1)
+    assert len(result["volumes"]) == 7
+    assert len(result["thermal_expansion_coefficients"]) == len(result["temperatures"])
 
 
 def test_phonon_calc_imaginary_freq_tol(
@@ -244,23 +260,6 @@ def test_phonon_calc_imaginary_freq_tol(
     assert len(result["volumes"]) == 7
     assert len(result["electronic_energies"]) == 7
 
-    # Distorted
-    distorted_si_atoms = Si_atoms.copy()
-    distorted_si_atoms.cell += 0.5
-    qha_calc = QHACalc(
-        calculator=matpes_calculator,
-        t_step=50,
-        t_max=1000,
-        scale_factors=[0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03],
-        fmax=100,
-        imaginary_freq_tol=-0.1,
-        on_imaginary_modes="error",
-        phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
-    )
-
-    with pytest.raises(ValueError, match="modes are imaginary"):
-        qha_calc.calc(distorted_si_atoms)
-
     # Distorted but tol is very negative so no modes are flagged
     distorted_si_atoms = Si_atoms.copy()
     distorted_si_atoms.cell += 0.5
@@ -278,14 +277,38 @@ def test_phonon_calc_imaginary_freq_tol(
     assert len(result["volumes"]) == 7
     assert len(result["electronic_energies"]) == 7
 
+    # Distorted with tol=-0.1, so imaginary modes are flagged → error
+    distorted_si_atoms2 = Si_atoms.copy()
+    distorted_si_atoms2.cell += 0.5
+    qha_calc = QHACalc(
+        calculator=matpes_calculator,
+        t_step=50,
+        t_max=1000,
+        scale_factors=[0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03],
+        fmax=100,
+        imaginary_freq_tol=-0.1,
+        on_imaginary_modes="error",
+        phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
+    )
+    with pytest.raises(ValueError, match="modes are imaginary"):
+        qha_calc.calc(distorted_si_atoms2)
 
-def test_qha_calc_fix_imaginary_attempts(
+
+@pytest.mark.parametrize(
+    ("fix_imaginary_attempts", "expect_log"),
+    [
+        (0, False),
+        (1, True),
+    ],
+)
+def test_qha_imaginary_modes_raises(
     Si_atoms: Atoms,
     matpes_calculator: PESCalculator,
     caplog: pytest.LogCaptureFixture,
+    fix_imaginary_attempts: int,
+    expect_log: bool,
 ) -> None:
-    """Test that fix_imaginary_attempts is accepted by QHACalc and passed to PhononCalc."""
-    # Distorted
+    """Test that imaginary modes with on_imaginary_modes='error' raises ValueError (with/without fix attempts)."""
     distorted_si_atoms = Si_atoms.copy()
     distorted_si_atoms.cell += 0.5
     qha_calc = QHACalc(
@@ -295,14 +318,93 @@ def test_qha_calc_fix_imaginary_attempts(
         scale_factors=[0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03],
         fmax=100,
         imaginary_freq_tol=-0.1,
-        fix_imaginary_attempts=1,
+        fix_imaginary_attempts=fix_imaginary_attempts,
         on_imaginary_modes="error",
         phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
     )
     with caplog.at_level(logging.INFO, logger="matcalc"), pytest.raises(ValueError, match="modes are imaginary"):
         qha_calc.calc(distorted_si_atoms)
-    assert any("Imaginary mode correction attempt" in r.message for r in caplog.records)
-    caplog.clear()
+    if expect_log:
+        assert any("Imaginary mode correction attempt" in r.message for r in caplog.records)
+    else:
+        assert not any("Imaginary mode correction attempt" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("store_ha_phonon", "scale_factors"),
+    [
+        (True, [0.97, 0.99, 1.00, 1.01, 1.03]),
+        (False, [0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03]),
+    ],
+)
+def test_qha_store_ha_phonon(
+    Si_atoms: Atoms,
+    matpes_calculator: PESCalculator,
+    store_ha_phonon: bool,
+    scale_factors: list[float],
+) -> None:
+    """Test store_ha_phonon=True populates the 'ha' key in the result; False omits it."""
+    qha_calc = QHACalc(
+        calculator=matpes_calculator,
+        t_step=50,
+        t_max=300,
+        scale_factors=scale_factors,
+        fmax=0.1,
+        store_ha_phonon=store_ha_phonon,
+        phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
+    )
+    result = qha_calc.calc(Si_atoms)
+
+    if store_ha_phonon:
+        assert "ha" in result
+        assert len(result["ha"]) == len(scale_factors)
+        for ha_result in result["ha"]:
+            assert "phonon" in ha_result
+            assert isinstance(ha_result["phonon"], phonopy.Phonopy)
+            assert "thermal_properties" in ha_result
+            assert "frequencies" in ha_result
+            assert "final_structure" in ha_result
+    else:
+        assert "ha" not in result
+
+
+@pytest.mark.parametrize("use_custom_template", [False, True])
+def test_qha_write_ha_phonon(
+    Si_atoms: Atoms,
+    matpes_calculator: PESCalculator,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    use_custom_template: bool,
+) -> None:
+    """Test write_ha_phonon=True writes one phonopy file per scale factor (default and custom template)."""
+    scale_factors = [0.97, 0.99, 1.00, 1.01, 1.03]
+
+    if use_custom_template:
+        # Use a flat path template (no subdirectories) so phonopy can write without needing mkdir
+        write_ha_phonon: bool | str = str(tmp_path / "ph_{scale_factor:.4f}.yaml")
+        expected_files = [tmp_path / f"ph_{sf:.4f}.yaml" for sf in scale_factors]
+    else:
+        write_ha_phonon = True
+        expected_files = [tmp_path / f"phonon_{sf:.3f}.yaml" for sf in scale_factors]
+
+    qha_calc = QHACalc(
+        calculator=matpes_calculator,
+        t_step=50,
+        t_max=300,
+        scale_factors=scale_factors,
+        fmax=0.1,
+        write_ha_phonon=write_ha_phonon,
+        phonon_calc_kwargs={"supercell_matrix": ((2, 0, 0), (0, 2, 0), (0, 0, 2))},
+    )
+
+    if use_custom_template:
+        qha_calc.calc(Si_atoms)
+    else:
+        monkeypatch.chdir(tmp_path)
+        qha_calc.calc(Si_atoms)
+
+    for expected_file in expected_files:
+        assert expected_file.is_file(), f"Expected phonopy file not found: {expected_file}"
 
 
 def test_qha_multiple_pressures(
