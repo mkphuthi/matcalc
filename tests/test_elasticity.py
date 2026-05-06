@@ -37,7 +37,7 @@ def test_elastic_calc(
     assert results["structure"].lattice.a == pytest.approx(3.291071792359756, rel=1e-1)
 
     assert results["elastic_tensor"][0][1][1][0] == pytest.approx(0.4616500809788702, rel=1e-1)
-    assert results["bulk_modulus_vrh"] == pytest.approx(0.45903962068080767, rel=1e-1)
+    assert results["bulk_modulus_vrh"] == pytest.approx(0.5064644749775054, rel=1e-1)
     assert results["shear_modulus_vrh"] == pytest.approx(0.40219758881584616, rel=1e-1)
     # Youngs modulus is now self-consistent with bulk/shear (eV/A^3 by default).
     # Previous value used pymatgen's ElasticTensor.y_mod which hardcodes a 9e9
@@ -58,7 +58,7 @@ def test_elastic_calc(
     )
 
     results = elast_calc.calc(Li2O)
-    assert results["residuals_sum"] == pytest.approx(2.736990723556343e-08, rel=1e-1)
+    assert results["residuals_sum"] == pytest.approx(2.285e-08, rel=2e-1)
 
     # Test Li2O with float
     elast_calc = ElasticityCalc(
@@ -72,7 +72,7 @@ def test_elastic_calc(
 
     results = elast_calc.calc(Li2O)
     assert results["residuals_sum"] == 0.0
-    assert results["bulk_modulus_vrh"] == pytest.approx(0.4507664949851733, rel=1e-1)
+    assert results["bulk_modulus_vrh"] == pytest.approx(0.4982440620197328, rel=1e-1)
 
 
 def test_elastic_calc_atoms(

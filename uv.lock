@@ -2584,8 +2584,8 @@ requires-dist = [
     { name = "jupyter", marker = "extra == 'ci'", specifier = ">=1.1.1" },
     { name = "maml", marker = "extra == 'ci'", specifier = ">=2025.4.3" },
     { name = "maml", marker = "extra == 'maml'", specifier = ">=2025.4.3" },
-    { name = "matgl", marker = "extra == 'ci'", specifier = ">=2.1.1" },
-    { name = "matgl", marker = "extra == 'matgl'", specifier = ">=2.2.1" },
+    { name = "matgl", marker = "extra == 'ci'", specifier = ">=3.0.0" },
+    { name = "matgl", marker = "extra == 'matgl'", specifier = ">=3.0.0" },
     { name = "matminer", marker = "extra == 'benchmark'", specifier = ">=0.10.1" },
     { name = "matminer", marker = "extra == 'ci'", specifier = ">=0.10.1" },
     { name = "mp-api", marker = "extra == 'ci'", specifier = ">=0.45.3" },
@@ -2613,7 +2613,7 @@ dev = [
     { name = "ipython", specifier = ">=8.34.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "maml", specifier = ">=2025.4.3" },
-    { name = "matgl", specifier = ">=2.1.1" },
+    { name = "matgl", specifier = ">=3.0.0" },
     { name = "matminer", specifier = ">=0.10.1" },
     { name = "mp-api", specifier = ">=0.45.3" },
     { name = "nbmake", specifier = ">=1.5.5" },
@@ -2636,7 +2636,7 @@ lint = [
 
 [[package]]
 name = "matgl"
-version = "2.2.1"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ase" },
@@ -2651,9 +2651,9 @@ dependencies = [
     { name = "torch-geometric" },
     { name = "torchdata" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ea/bf/3ab4d1786a45526cf8ad41d432fe0044d35d8fdb5801d9a3172b2210d8fc/matgl-2.2.1.tar.gz", hash = "sha256:37e972d3a529e8a413e21b1c07d38aa3d320d6f926d457b3bda1219b899c587b", size = 274937, upload-time = "2026-04-27T10:37:55.625Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/fa/9a6db75296e3e662e47e5f824f0bee60df09f5fc07f36a20a7f31cf38a76/matgl-3.0.0.tar.gz", hash = "sha256:1bdfc8e32fb580206642c90bfd959dd84ac46d1946fc4f1abf3818d7c14f51ca", size = 291698, upload-time = "2026-05-04T23:00:50.878Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/02/7ae14114e39346daf5524fe9074ba239c102a16e25c66cf2284b7a052dd9/matgl-2.2.1-py3-none-any.whl", hash = "sha256:b0d36fd4f16a61cf4e5d6a4f6271b2770c26c0dc2e12a7b1bd86d7f248f098e5", size = 337947, upload-time = "2026-04-27T10:37:53.583Z" },
+    { url = "https://files.pythonhosted.org/packages/23/d0/5df95ade5a40eb764651366df585d32aa1477fb2ae4d7fe9e0254473a431/matgl-3.0.0-py3-none-any.whl", hash = "sha256:b23befc822c5669b6acda796164eff490294086fca198eb1c805531ff09d07d4", size = 362012, upload-time = "2026-05-04T23:00:49.091Z" },
 ]
 
 [[package]]
