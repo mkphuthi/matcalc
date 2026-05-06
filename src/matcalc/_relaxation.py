@@ -114,7 +114,9 @@ class RelaxCalc(PropCalc):
         structure_in: Structure | Atoms = result["final_structure"]
 
         if self.perturb_distance is not None:
-            structure_in = to_pmg_structure(structure_in).perturb(distance=self.perturb_distance, seed=None)
+            # Copy first: ``Structure.perturb`` mutates in place, which would clobber a
+            # caller-owned (e.g. session-scoped) Structure passed in by reference.
+            structure_in = to_pmg_structure(structure_in).copy().perturb(distance=self.perturb_distance, seed=None)
 
         atoms = to_ase_atoms(structure_in)
         constraints: list[Any] = []
