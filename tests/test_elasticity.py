@@ -43,7 +43,7 @@ def test_elastic_calc(
     # Previous value used pymatgen's ElasticTensor.y_mod which hardcodes a 9e9
     # GPa->Pa factor that produced incorrect units; see Issue #85.
     assert results["youngs_modulus"] == pytest.approx(0.9338539283876991, rel=1e-1)
-    assert results["residuals_sum"] == pytest.approx(3.581519020751326e-08, rel=1e-1)
+    assert results["residuals_sum"] == pytest.approx(3.581519020751326e-08, abs=1e-8)
     assert results["_units"]["bulk_modulus_vrh"] == "eV/A^3"
     assert results["_units"]["youngs_modulus"] == "eV/A^3"
 
@@ -58,7 +58,7 @@ def test_elastic_calc(
     )
 
     results = elast_calc.calc(Li2O)
-    assert results["residuals_sum"] == pytest.approx(2.285e-08, rel=2e-1)
+    assert results["residuals_sum"] == pytest.approx(2.285e-08, abs=1e-8)
 
     # Test Li2O with float
     elast_calc = ElasticityCalc(
