@@ -52,6 +52,8 @@ def test_phonon3_calc(
     result = phonon3_calc.calc(Si)
     ind = result["temperatures"].tolist().index(300)
     assert result["thermal_conductivity"][ind] == pytest.approx(88.87, rel=1e-1)
+    assert result["_units"]["thermal_conductivity"] == "W/(m*K)"
+    assert result["_units"]["temperatures"] == "K"
 
     if write_phonon3_path:
         assert os.path.isfile(str(write_phonon3_path))

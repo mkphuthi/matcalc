@@ -64,6 +64,12 @@ def test_phonon_calc(
     assert thermal_props["heat_capacity"][ind] == pytest.approx(56.618323353498866, rel=1e-1)
     assert thermal_props["entropy"][ind] == pytest.approx(43.70960755706888, rel=1e-1)
     assert thermal_props["free_energy"][ind] == pytest.approx(15.620299826689202, rel=1e-1)
+    units = result["_units"]
+    assert units["thermal_properties.temperatures"] == "K"
+    assert units["thermal_properties.heat_capacity"] == "J/(K*mol)"
+    assert units["thermal_properties.entropy"] == "J/(K*mol)"
+    assert units["thermal_properties.free_energy"] == "kJ/mol"
+    assert units["frequencies"] == "THz"
     assert_allclose(
         result["final_structure"].lattice.abc,
         (3.291071792359756, 3.291071792359756, 3.291071792359756),

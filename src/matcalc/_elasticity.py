@@ -96,11 +96,11 @@ class ElasticityCalc(PropCalc):
 
         Returns:
             Dict including ``elastic_tensor``, ``shear_modulus_vrh``, ``bulk_modulus_vrh``,
-            ``youngs_modulus``, ``residuals_sum``, ``structure``, and merged relaxation
-            fields. ``elastic_tensor``, ``shear_modulus_vrh``, ``bulk_modulus_vrh`` and
-            ``residuals_sum`` are returned in GPa if ``units_GPa=True``, otherwise in eV/A^3
-            (pymatgen's native units). ``youngs_modulus`` is always reported in pymatgen's
-            default units (see pymatgen ``ElasticTensor`` docs).
+            ``youngs_modulus``, ``residuals_sum``, ``structure``, ``_units``, and merged
+            relaxation fields. ``elastic_tensor``, ``shear_modulus_vrh``,
+            ``bulk_modulus_vrh``, ``youngs_modulus`` and ``residuals_sum`` are returned
+            in GPa if ``units_GPa=True``, otherwise in eV/A^3 (pymatgen's native units).
+            ``_units`` is a dict mapping each numeric output to its unit string.
         """
         result = super().calc(structure)
         structure_in: Structure | Atoms = result["final_structure"]
@@ -136,13 +136,30 @@ class ElasticityCalc(PropCalc):
             eq_stress=sim.stress if self.use_equilibrium else None,
         )
         factor = 1 if not self.units_GPa else 1 / elastic_tensor.GPa_to_eV_A3
+        # Compute Young's modulus from the same VRH averages used for K, G so it
+        # is dimensionally consistent. pymatgen's ``ElasticTensor.y_mod`` hardcodes
+        # a 9e9 GPa->Pa factor that assumes K/G are in GPa; with pymatgen's native
+        # eV/A^3 storage that produces nonsense units (see Issue #85).
+        k = elastic_tensor.k_vrh
+        g = elastic_tensor.g_vrh
+        y = 9 * k * g / (3 * k + g)
+        unit_str = "GPa" if self.units_GPa else "eV/A^3"
+        units_map = {
+            **result.get("_units", {}),
+            "elastic_tensor": unit_str,
+            "bulk_modulus_vrh": unit_str,
+            "shear_modulus_vrh": unit_str,
+            "youngs_modulus": unit_str,
+            "residuals_sum": unit_str,
+        }
         return result | {
             "elastic_tensor": elastic_tensor * factor,
-            "shear_modulus_vrh": elastic_tensor.g_vrh * factor,
-            "bulk_modulus_vrh": elastic_tensor.k_vrh * factor,
-            "youngs_modulus": elastic_tensor.y_mod,
+            "shear_modulus_vrh": g * factor,
+            "bulk_modulus_vrh": k * factor,
+            "youngs_modulus": y * factor,
             "residuals_sum": residuals_sum * factor,
             "structure": structure_in,
+            "_units": units_map,
         }
 
     def _elastic_tensor_from_strains(

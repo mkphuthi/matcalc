@@ -72,6 +72,11 @@ def test_md_calc(
     assert "kinetic_energy" in results
     assert "total_energy" in results
 
+    units = results["_units"]
+    assert units["potential_energy"] == "eV"
+    assert units["kinetic_energy"] == "eV"
+    assert units["total_energy"] == "eV"
+
     assert results["total_energy"] == pytest.approx(expected_energy, abs=1e-2)
 
     energies = np.array([a.get_total_energy() for a in results["trajectory"]])
