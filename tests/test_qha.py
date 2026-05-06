@@ -130,6 +130,16 @@ def test_qha_calc(
     assert result["bulk_modulus_P"][ind] == pytest.approx(70.91381208222826, rel=1e-1)
     assert result["heat_capacity_P"][ind] == pytest.approx(59.2773001627165, rel=1e-1)
     assert result["gruneisen_parameters"][ind] == pytest.approx(1.694821179002536, rel=1e-1)
+    units = result["_units"]
+    assert units["temperatures"] == "K"
+    assert units["volumes"] == "A^3"
+    assert units["electronic_energies"] == "eV"
+    assert units["thermal_expansion_coefficients"] == "1/K"
+    assert units["gibbs_free_energies"] == "kJ/mol"
+    assert units["bulk_modulus_P"] == "GPa"
+    assert units["heat_capacity_P"] == "J/(K*mol)"
+    assert units["gruneisen_parameters"] == "dimensionless"
+    assert units["pressures"] == "GPa"
     assert len(result["scaled_structures"]) == len(result["volumes"])
     scaled_structure_volumes = [scaled_structure.volume for scaled_structure in result["scaled_structures"]]
     assert_allclose(scaled_structure_volumes, result["volumes"])

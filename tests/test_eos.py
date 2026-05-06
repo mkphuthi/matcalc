@@ -26,6 +26,10 @@ def test_eos_calc(
     result = eos_calc.calc(Li2O)
 
     assert result["bulk_modulus_bm"] == pytest.approx(84.08164565338282, rel=1e-1)
+    assert result["_units"]["bulk_modulus_bm"] == "GPa"
+    assert result["_units"]["eos.volumes"] == "A^3"
+    assert result["_units"]["eos.energies"] == "eV"
+    assert result["_units"]["energy"] == "eV"
     assert {*result["eos"]} == {"volumes", "energies"}
     assert result["eos"]["volumes"] == pytest.approx(
         [
