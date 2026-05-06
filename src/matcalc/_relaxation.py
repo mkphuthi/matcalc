@@ -104,8 +104,10 @@ class RelaxCalc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or dict with structure keys.
 
         Returns:
-            Dict with ``final_structure``, ``energy``, ``forces``, ``stress``, and
-            lattice parameters ``a``, ``b``, ``c``, angles, and ``volume``.
+            Dict with ``final_structure``, ``energy`` (eV), ``forces`` (eV/A),
+            ``stress`` (eV/A^3), lattice parameters ``a``, ``b``, ``c`` (A), angles
+            ``alpha``, ``beta``, ``gamma`` (degrees), ``volume`` (A^3), and
+            ``_units`` mapping each numeric output to its unit string.
         """
         result = super().calc(structure)
 
@@ -154,6 +156,18 @@ class RelaxCalc(PropCalc):
                 "beta": lattice.beta,
                 "gamma": lattice.gamma,
                 "volume": lattice.volume,
+                "_units": {
+                    "energy": "eV",
+                    "forces": "eV/A",
+                    "stress": "eV/A^3",
+                    "a": "A",
+                    "b": "A",
+                    "c": "A",
+                    "alpha": "degree",
+                    "beta": "degree",
+                    "gamma": "degree",
+                    "volume": "A^3",
+                },
             }
         )
 

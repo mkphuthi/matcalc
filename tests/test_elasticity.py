@@ -39,8 +39,13 @@ def test_elastic_calc(
     assert results["elastic_tensor"][0][1][1][0] == pytest.approx(0.4616500809788702, rel=1e-1)
     assert results["bulk_modulus_vrh"] == pytest.approx(0.45903962068080767, rel=1e-1)
     assert results["shear_modulus_vrh"] == pytest.approx(0.40219758881584616, rel=1e-1)
-    assert results["youngs_modulus"] == pytest.approx(933853928.3876991, rel=1e-1)
+    # Youngs modulus is now self-consistent with bulk/shear (eV/A^3 by default).
+    # Previous value used pymatgen's ElasticTensor.y_mod which hardcodes a 9e9
+    # GPa->Pa factor that produced incorrect units; see Issue #85.
+    assert results["youngs_modulus"] == pytest.approx(0.9338539283876991, rel=1e-1)
     assert results["residuals_sum"] == pytest.approx(3.581519020751326e-08, rel=1e-1)
+    assert results["_units"]["bulk_modulus_vrh"] == "eV/A^3"
+    assert results["_units"]["youngs_modulus"] == "eV/A^3"
 
     # Test Li2O without the equilibrium structure
     elast_calc = ElasticityCalc(

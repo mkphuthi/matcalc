@@ -76,8 +76,9 @@ class EnergeticsCalc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or chained-result dict.
 
         Returns:
-            Dict with ``formation_energy_per_atom``, ``cohesive_energy_per_atom`` (or None),
-            ``final_structure``, and other keys from relaxation / PES when applicable.
+            Dict with ``formation_energy_per_atom`` (eV/atom), ``cohesive_energy_per_atom``
+            (eV/atom, or None if reference data missing), ``final_structure``, ``_units``,
+            and other keys from relaxation / PES when applicable.
         """
         result = super().calc(structure)
         structure_in: Structure | Atoms = result["final_structure"]
@@ -126,6 +127,11 @@ class EnergeticsCalc(PropCalc):
         except KeyError:
             result = result | {"cohesive_energy_per_atom": None}
 
+        existing_units = result.get("_units")
+        units_map: dict[str, str] = dict(existing_units) if isinstance(existing_units, dict) else {}
+        units_map["formation_energy_per_atom"] = "eV/atom"
+        units_map["cohesive_energy_per_atom"] = "eV/atom"
         return result | {
             "formation_energy_per_atom": e_form / nsites,
+            "_units": units_map,
         }

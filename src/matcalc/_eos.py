@@ -84,9 +84,10 @@ class EOSCalc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or dict with structure keys.
 
         Returns:
-            Dict with ``eos`` (volumes, energies), ``bulk_modulus_bm`` (GPa), ``r2_score_bm``,
-            and fields from the final relaxation merged in. See pymatgen ``BirchMurnaghan`` /
-            ``EOSBase`` for fit details.
+            Dict with ``eos`` (``volumes`` in A^3, ``energies`` in eV), ``bulk_modulus_bm``
+            (GPa), ``r2_score_bm`` (dimensionless), and fields from the final relaxation
+            merged in. ``_units`` maps each numeric output to its unit string. See pymatgen
+            ``BirchMurnaghan`` / ``EOSBase`` for fit details.
         """
         result = super().calc(structure)
         structure_in: Structure = to_pmg_structure(result["final_structure"])
@@ -136,8 +137,10 @@ class EOSCalc(PropCalc):
             list, zip(*sorted(zip(volumes, energies, strict=True), key=lambda i: i[0]), strict=False)
         )
 
+        eos_units = {**result.get("_units", {}), "eos.volumes": "A^3", "eos.energies": "eV", "bulk_modulus_bm": "GPa"}
         return result | {
             "eos": {"volumes": volumes, "energies": energies},
             "bulk_modulus_bm": bm.b0_GPa,
             "r2_score_bm": r2_score(energies, bm.func(volumes)),
+            "_units": eos_units,
         }
