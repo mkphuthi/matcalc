@@ -83,6 +83,14 @@ def test_static_calc_inputs(
     missing_keys = {*final_struct.lattice.params_dict} - {*result}
     assert len(missing_keys) == 0, f"{missing_keys=}"
 
+    units = result["_units"]
+    assert units["energy"] == "eV"
+    assert units["forces"] == "eV/A"
+    assert units["stress"] == "eV/A^3"
+    assert units["volume"] == "A^3"
+    assert units["a"] == units["b"] == units["c"] == "A"
+    assert units["alpha"] == units["beta"] == units["gamma"] == "degree"
+
     if input_kind == "structure":
         expected_energy = -14.176713
         expected_forces = np.array(

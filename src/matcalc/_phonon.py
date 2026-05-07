@@ -146,9 +146,11 @@ class PhononCalc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or dict with structure keys.
 
         Returns:
-            Dict with ``phonon`` (``phonopy.Phonopy``), ``thermal_properties`` (phonopy thermal dict:
-            temperatures, free_energy, entropy, heat_capacity; see phonopy docs for units),
-            ``frequencies``, ``disp_supercells``, plus any relaxation fields merged in.
+            Dict with ``phonon`` (``phonopy.Phonopy``), ``thermal_properties`` (phonopy thermal
+            dict: ``temperatures`` in K, ``free_energy`` in kJ/mol, ``entropy`` in J/(K*mol),
+            ``heat_capacity`` in J/(K*mol)), ``frequencies`` in THz, ``disp_supercells``, plus
+            any relaxation fields merged in. ``_units`` maps each numeric output to its unit
+            string.
         """
         result = super().calc(structure)
         structure_in: Structure = to_pmg_structure(result["final_structure"])
@@ -178,11 +180,20 @@ class PhononCalc(PropCalc):
             phonon.auto_total_dos(write_dat=True, filename=self.write_total_dos)
         if self.write_phonon:
             phonon.save(filename=self.write_phonon)  # type: ignore[arg-type]
+        units_map = {
+            **result.get("_units", {}),
+            "thermal_properties.temperatures": "K",
+            "thermal_properties.free_energy": "kJ/mol",
+            "thermal_properties.entropy": "J/(K*mol)",
+            "thermal_properties.heat_capacity": "J/(K*mol)",
+            "frequencies": "THz",
+        }
         return result | {
             "phonon": phonon,
             "thermal_properties": phonon.get_thermal_properties_dict(),
             "frequencies": frequencies,
             "disp_supercells": disp_supercells,
+            "_units": units_map,
         }
 
     def _run_phonopy(self, structure: Structure) -> tuple[phonopy.Phonopy, np.ndarray, list[Structure]]:

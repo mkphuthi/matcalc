@@ -128,9 +128,10 @@ class Phonon3Calc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or dict with structure keys.
 
         Returns:
-            Dict with ``phonon3`` (``Phono3py``), ``temperatures``, and
-            ``thermal_conductivity`` (spatially averaged κ in W/m·K where defined; NaN if
-            unavailable). See phono3py RTA documentation for details.
+            Dict with ``phonon3`` (``Phono3py``), ``temperatures`` (K), and
+            ``thermal_conductivity`` (spatially averaged kappa in W/(m*K) where defined;
+            NaN if unavailable). ``_units`` maps each numeric output to its unit string.
+            See phono3py RTA documentation for details.
         """
         result = super().calc(structure)
         structure_in: Structure = result["final_structure"]
@@ -198,4 +199,9 @@ class Phonon3Calc(PropCalc):
             "phonon3": phonon3,
             "temperatures": temperatures,
             "thermal_conductivity": np.squeeze(kappa_ave),
+            "_units": {
+                **result.get("_units", {}),
+                "temperatures": "K",
+                "thermal_conductivity": "W/(m*K)",
+            },
         }

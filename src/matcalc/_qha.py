@@ -208,20 +208,17 @@ class QHACalc(PropCalc):
             structure: Pymatgen structure, ASE atoms, or dict with structure keys.
 
         Returns:
-            Dict with ``qha`` (``PhonopyQHA``), per-volume lists (``scale_factors``, ``volumes``,
-            ``electronic_energies``, ``scaled_structures``), temperature arrays for thermal
-            expansion, Gibbs energy, bulk modulus, Cp, and Gruneisen parameter, merged with any
-            relaxation fields from earlier steps. When ``store_ha_phonon=True``, also includes
-            ``"ha"``: a list of per-scale-factor ``PhononCalc`` result dicts (one per scale
-            factor, in the same order as ``scale_factors``). Units follow phonopy QHA.
-            Dict with per-volume data (``scale_factors``, ``volumes``, ``electronic_energies``,
-            ``scaled_structures``), a ``pressures`` list, and a ``qha_results`` list of
-            per-pressure dicts each containing ``pressure``, ``qha``, ``temperatures``,
-            ``thermal_expansion_coefficients``, ``gibbs_free_energies``, ``bulk_modulus_P``,
-            ``heat_capacity_P``, and ``gruneisen_parameters``. When only a single pressure was
+            Dict with per-volume data (``scale_factors``, ``volumes`` in A^3,
+            ``electronic_energies`` in eV, ``scaled_structures``), a ``pressures`` list (GPa),
+            ``temperatures`` (K), and a ``qha_results`` list of per-pressure dicts each
+            containing ``pressure`` (GPa), ``qha`` (``PhonopyQHA``),
+            ``thermal_expansion_coefficients`` (1/K), ``gibbs_free_energies`` (kJ/mol),
+            ``bulk_modulus_P`` (GPa), ``heat_capacity_P`` (J/(K*mol)), and
+            ``gruneisen_parameters`` (dimensionless). When only a single pressure was
             requested the top-level dict also contains those keys directly for backward
-            compatibility. Merged with any relaxation fields from earlier steps.
-            Units follow phonopy QHA.
+            compatibility. When ``store_ha_phonon=True``, also includes ``"ha"``: a list of
+            per-scale-factor ``PhononCalc`` result dicts. ``_units`` maps each numeric output
+            to its unit string. Merged with any relaxation fields from earlier steps.
         """
         result = super().calc(structure)
         structure_in: Structure = to_pmg_structure(result["final_structure"])
@@ -292,6 +289,19 @@ class QHACalc(PropCalc):
         # Backward-compatible unwrap for the single-pressure case.
         if len(self.pressures) == 1:
             output_dict |= qha_results[0]
+
+        output_dict["_units"] = {
+            **result.get("_units", {}),
+            "pressures": "GPa",
+            "temperatures": "K",
+            "volumes": "A^3",
+            "electronic_energies": "eV",
+            "thermal_expansion_coefficients": "1/K",
+            "gibbs_free_energies": "kJ/mol",
+            "bulk_modulus_P": "GPa",
+            "heat_capacity_P": "J/(K*mol)",
+            "gruneisen_parameters": "dimensionless",
+        }
 
         return result | output_dict
 

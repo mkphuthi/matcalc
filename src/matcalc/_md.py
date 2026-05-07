@@ -348,8 +348,10 @@ class MDCalc(PropCalc):
             structure (Structure | Atoms | dict[str, Any]): Input structure as a Structure instance or a dictionary.
 
         Returns:
-            dict: A dictionary containing the final energy and the final atomic configuration.
-                  It includes the keys "final_structure" and "energy".
+            dict: A dictionary with ``final_structure``, ``trajectory`` (list of ASE Atoms),
+                ``potential_energy`` (eV), ``kinetic_energy`` (eV), ``total_energy`` (eV)
+                averaged over the last ``frames`` frames, ``_units`` mapping each numeric
+                output to its unit string, plus any relaxation fields merged in.
         """
         # Preprocess the input structure using the superclass's calc method.
         # This initial processing returns a dictionary containing a "final_structure".
@@ -427,6 +429,12 @@ class MDCalc(PropCalc):
             "potential_energy": energy_pot,
             "kinetic_energy": energy_kin,
             "total_energy": energy_tot,
+            "_units": {
+                **result.get("_units", {}),
+                "potential_energy": "eV",
+                "kinetic_energy": "eV",
+                "total_energy": "eV",
+            },
         }
 
         # Return the complete result dictionary.
