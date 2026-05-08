@@ -43,7 +43,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     # MatGL — CHGNet
     "CHGNet-MatPES-PBE-2025.2.10": {"provider": "matgl", "path": "CHGNet-PES-MatPES-PBE-2025.2.10"},
     "CHGNet-MatPES-r2SCAN-2025.2.10": {"provider": "matgl", "path": "CHGNet-PES-MatPES-r2SCAN-2025.2.10"},
-    "CHGNet-MatPES-PBE-2025.2.10-2.7M": {"provider": "matgl", "path": "CHGNet-PES-MatPES-PBE-2025.2.10"},
     "CHGNet-MPtrj-2023.12.1-2.7M": {"provider": "matgl", "path": "CHGNet-MPtrj-2023.12.1-2.7M-PES"},
     "CHGNet-MPtrj-2024.2.13-11M": {"provider": "matgl", "path": "CHGNet-MPtrj-2024.2.13-11M-PES"},
     # MACE foundation models (mace-foundations release names)
@@ -117,7 +116,7 @@ MODEL_ALIASES: dict[str, str] = {
     "m3gnet-pes-matpes-pbe-2025.1": "M3GNet-MatPES-PBE-2025.1",
     "chgnet-pes-matpes-pbe-2025.2.10": "CHGNet-MatPES-PBE-2025.2.10",
     "chgnet-pes-matpes-r2scan-2025.2.10": "CHGNet-MatPES-r2SCAN-2025.2.10",
-    "chgnet-matpes-pbe-2025.2.10-2.7m-pes": "CHGNet-MatPES-PBE-2025.2.10-2.7M",
+    "chgnet-matpes-pbe-2025.2.10-2.7m-pes": "CHGNet-PES-MatPES-PBE-2025.2.10",
     "chgnet-mptrj-2023.12.1-2.7m-pes": "CHGNet-MPtrj-2023.12.1-2.7M",
     "chgnet-mptrj-2024.2.13-11m-pes": "CHGNet-MPtrj-2024.2.13-11M",
 }
