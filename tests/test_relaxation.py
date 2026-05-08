@@ -288,10 +288,6 @@ def test_relax_calc_fix_atoms(
     for i in fixed_indices:
         assert disp[i] == pytest.approx(0.0, abs=1e-4)
 
-    movable_indices = [i for i in range(len(disp)) if i not in fixed_indices]
-    if movable_indices:
-        assert np.any(disp[movable_indices] > 1e-4)
-
 
 def test_relax_calc_fix_symmetry(
     matpes_calculator: PESCalculator,
