@@ -44,7 +44,7 @@ def test_phonon3_calc(
         t_max=1000,
         mesh_numbers=mesh_numbers,
         disp_kwargs={"distance": 0.03},
-        thermal_conductivity_kwargs={"is_isotope": True, "transport_type": "MS-SMM19"},
+        thermal_conductivity_kwargs={"is_isotope": True, "transport_type": "SMM19"},
         write_phonon3=write_phonon3_path,
         write_kappa=write_kappa,
     )
@@ -82,7 +82,7 @@ def test_phonon3_calc_atoms(
         t_max=1000,
         mesh_numbers=mesh_numbers,
         disp_kwargs={"distance": 0.03},
-        thermal_conductivity_kwargs={"is_isotope": True, "transport_type": "MS-SMM19"},
+        thermal_conductivity_kwargs={"is_isotope": True, "transport_type": "SMM19"},
     )
 
     result = phonon3_calc.calc(Si_atoms)

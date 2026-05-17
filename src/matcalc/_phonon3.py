@@ -187,7 +187,7 @@ class Phonon3Calc(PropCalc):
             write_kappa=self.write_kappa,
         )
 
-        kappa = np.asarray(phonon3.thermal_conductivity.kappa_TOT_RTA)
+        kappa = np.asarray(phonon3.thermal_conductivity.kappa)
         if kappa.size == 0 or np.any(np.isnan(kappa)):
             warnings.warn(
                 f"Phono3py thermal conductivity returned NaN or empty values for "
