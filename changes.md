@@ -6,6 +6,9 @@ nav_order: 2
 
 # Change Log
 
+## v0.5.1
+1. CI hygiene: drop `dgl` install pin from all GitHub Actions workflows (matgl now resolves its own backend); fix `release.yml` permissions/`secrets: inherit` so the reusable `test.yml` call satisfies the subset rule and PyPI trusted publishing works.
+
 ## v0.5.0
 1. **`RelaxCalc` convergence checks.**
    - `RelaxCalc.calc` surfaces `is_converged` and `max_force` in its result dict.
