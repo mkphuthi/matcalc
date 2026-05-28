@@ -6,6 +6,18 @@ nav_order: 2
 
 # Change Log
 
+## v0.5.0
+1. **`RelaxCalc` convergence checks.**
+   - `RelaxCalc.calc` surfaces `is_converged` and `max_force` in its result dict.
+   - `PropCalc._prerelax` raises `RuntimeError` when the pre-relaxation fails to converge, instead of silently feeding an unrelaxed structure into downstream property calcs.
+   - `RelaxCalc` now copies the structure before perturbing, eliminating a caller-mutation hazard.
+2. **PR #218 Extract `PropCalc._prerelax` helper; fold relax boilerplate** by @shyuep
+   - Centralises the `if self.relax_structure: relaxer = RelaxCalc(...); result |= relaxer.calc(structure); structure = result['final_structure']` pattern duplicated across `_phonon3`, `_eos`, `_qha`, `_md`, `_stability`, and `_elasticity`.
+2. **PR #210 / #85 Fix `youngs_modulus` and add `_units` metadata across all `PropCalc`s** by @shyuep
+   - Self-consistent `youngs_modulus` computation; every `PropCalc` result now carries a `_units` dict, with assertions in the test suite.
+3. **`Phonon3Calc` adapted to the new phono3py conductivity API.**
+4. **Foundation potential model naming unified.** UMA model names updated to match FAIRChem upstream; CHGNet alias typo fixed; small registry cleanups.
+
 ## v0.4.8
 1. Updated the Hugging Face organization to `materialyze` (lower case).
 
