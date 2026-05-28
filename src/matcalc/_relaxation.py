@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
 from ase.constraints import FixAtoms, FixSymmetry
 from ase.filters import FrechetCellFilter
 
@@ -105,9 +106,11 @@ class RelaxCalc(PropCalc):
 
         Returns:
             Dict with ``final_structure``, ``energy`` (eV), ``forces`` (eV/A),
-            ``stress`` (eV/A^3), lattice parameters ``a``, ``b``, ``c`` (A), angles
-            ``alpha``, ``beta``, ``gamma`` (degrees), ``volume`` (A^3), and
-            ``_units`` mapping each numeric output to its unit string.
+            ``stress`` (eV/A^3), ``max_force`` (eV/A, max per-atom force
+            magnitude), ``is_converged`` (True when ``max_force`` <= ``fmax``),
+            lattice parameters ``a``, ``b``, ``c`` (A), angles ``alpha``,
+            ``beta``, ``gamma`` (degrees), ``volume`` (A^3), and ``_units``
+            mapping each numeric output to its unit string.
         """
         result = super().calc(structure)
 
@@ -145,12 +148,15 @@ class RelaxCalc(PropCalc):
         )
 
         lattice = r.structure.lattice
+        max_force = float(np.linalg.norm(r.forces, axis=1).max())
         result.update(
             {
                 "final_structure": r.structure,
                 "energy": r.potential_energy,
                 "forces": r.forces,
                 "stress": r.stress,
+                "max_force": max_force,
+                "is_converged": max_force <= self.fmax,
                 "a": lattice.a,
                 "b": lattice.b,
                 "c": lattice.c,
@@ -164,6 +170,7 @@ class RelaxCalc(PropCalc):
                         "energy": "eV",
                         "forces": "eV/A",
                         "stress": "eV/A^3",
+                        "max_force": "eV/A",
                         "a": "A",
                         "b": "A",
                         "c": "A",

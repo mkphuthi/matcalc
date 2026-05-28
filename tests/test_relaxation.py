@@ -321,6 +321,42 @@ def test_relax_calc_fix_symmetry(
     assert spg_final == spg_ref
 
 
+def test_relax_calc_convergence_keys(
+    Li2O: Structure,
+    matpes_calculator: PESCalculator,
+) -> None:
+    # Converged run: ample steps, default fmax.
+    converged = RelaxCalc(
+        matpes_calculator,
+        optimizer="FIRE",
+        relax_atoms=True,
+        relax_cell=True,
+        fmax=0.1,
+        max_steps=300,
+    ).calc(Li2O)
+
+    assert "max_force" in converged
+    assert "is_converged" in converged
+    assert converged["_units"]["max_force"] == "eV/A"
+    expected_max_force = float(np.linalg.norm(converged["forces"], axis=1).max())
+    assert converged["max_force"] == pytest.approx(expected_max_force)
+    assert converged["is_converged"] is True
+    assert converged["max_force"] <= 0.1
+
+    # Non-converged run: one step, tight fmax.
+    not_converged = RelaxCalc(
+        matpes_calculator,
+        optimizer="FIRE",
+        relax_atoms=True,
+        relax_cell=True,
+        fmax=1e-8,
+        max_steps=1,
+    ).calc(Li2O)
+
+    assert not_converged["is_converged"] is False
+    assert not_converged["max_force"] > 1e-8
+
+
 def test_relax_calc_many(
     Li2O: Structure,
     matpes_calculator: PESCalculator,
