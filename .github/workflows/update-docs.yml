@@ -4,8 +4,13 @@
 name: Update Docs
 
 on:
-  release:
-    types: [published]
+  # Run after the Release workflow finishes. workflow_run executes against the
+  # default branch (main), which satisfies the github-pages environment's
+  # deployment-branch policy. A release: published trigger would run on the
+  # tag ref and be blocked by that policy.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 # Permissions required to deploy to GitHub Pages.
@@ -23,7 +28,10 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'materialyzeai/matcalc'
+    if: >-
+      github.repository == 'materialyzeai/matcalc' &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
