@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator
     from pymatgen.core import Structure
 
+    from ._relaxation import RelaxCalc
+
 
 class PropCalc(abc.ABC):
     """
@@ -92,7 +94,7 @@ class PropCalc(abc.ABC):
         self,
         structure: Structure | Atoms,
         result: dict[str, Any],
-        relaxer: PropCalc | None = None,
+        relaxer: RelaxCalc | None = None,
         **relax_kwargs: Any,
     ) -> tuple[dict[str, Any], Structure | Atoms]:
         """Optionally relax ``structure`` and merge the relaxation result.
@@ -118,6 +120,14 @@ class PropCalc(abc.ABC):
         Returns:
             ``(result, structure)`` — both updated when a relaxation ran, both
             unchanged otherwise.
+
+        Raises:
+            RuntimeError: If the pre-relaxation did not converge within
+                ``max_steps``. Downstream property calculations (elastic
+                constants, EOS, phonons, ...) sample the PES around what is
+                meant to be an equilibrium structure; running them on an
+                unrelaxed structure yields physically meaningless numbers, so
+                the chain is aborted rather than propagating bad inputs.
         """
         if not getattr(self, "relax_structure", False):
             return result, structure
@@ -129,6 +139,14 @@ class PropCalc(abc.ABC):
             extra = getattr(self, "relax_calc_kwargs", None) or {}
             relaxer = RelaxCalc(self.calculator, **{**relax_kwargs, **extra})
         relax_result = relaxer.calc(structure)
+        if not relax_result.get("is_converged", True):
+            raise RuntimeError(
+                f"Pre-relaxation did not converge: max|F| = {relax_result['max_force']:.4g} eV/A "
+                f"> fmax = {relaxer.fmax:.4g} eV/A after {relaxer.max_steps} steps. "
+                "Subsequent property calculations assume an equilibrium structure and would "
+                "produce unreliable results; increase max_steps, loosen fmax, or relax the "
+                "structure separately before passing it in."
+            )
         merged = {**result, **relax_result}
         return merged, relax_result["final_structure"]
 

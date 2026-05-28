@@ -104,3 +104,21 @@ def test_elastic_calc_invalid_states(matpes_calculator: PESCalculator) -> None:
         ElasticityCalc(matpes_calculator, norm_strains=[0.0, 0.1])
     with pytest.raises(ValueError, match="strains must be non-zero"):
         ElasticityCalc(matpes_calculator, shear_strains=[0.0, 0.1])
+
+
+def test_prerelax_raises_on_non_convergence(
+    Li2O: Structure,
+    matpes_calculator: PESCalculator,
+) -> None:
+    # Force the pre-relax to fail by capping it at a single step with a
+    # tight fmax. _prerelax must abort rather than feed an unrelaxed
+    # structure into the elasticity calc.
+    elast_calc = ElasticityCalc(
+        matpes_calculator,
+        fmax=1e-8,
+        norm_strains=list(np.linspace(-0.004, 0.004, num=4)),
+        shear_strains=list(np.linspace(-0.004, 0.004, num=4)),
+        relax_calc_kwargs={"max_steps": 1, "cell_filter": ExpCellFilter},
+    )
+    with pytest.raises(RuntimeError, match="Pre-relaxation did not converge"):
+        elast_calc.calc(Li2O)
