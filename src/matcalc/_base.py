@@ -16,8 +16,6 @@ if TYPE_CHECKING:
     from ase.calculators.calculator import Calculator
     from pymatgen.core import Structure
 
-    from ._relaxation import RelaxCalc
-
 
 class PropCalc(abc.ABC):
     """
@@ -94,7 +92,6 @@ class PropCalc(abc.ABC):
         self,
         structure: Structure | Atoms,
         result: dict[str, Any],
-        relaxer: RelaxCalc | None = None,
         **relax_kwargs: Any,
     ) -> tuple[dict[str, Any], Structure | Atoms]:
         """Optionally relax ``structure`` and merge the relaxation result.
@@ -103,19 +100,17 @@ class PropCalc(abc.ABC):
         by most property calculators. Honors ``self.relax_structure``; when False
         (or absent), the input is returned unchanged.
 
-        Pass ``relaxer`` to reuse a single ``RelaxCalc`` instance across multiple
-        calls (e.g. relaxing the parent structure and then deformed structures
-        with different settings); otherwise pass relaxation kwargs and a fresh
-        ``RelaxCalc`` is constructed using ``self.calculator``.
+        Constructs a fresh ``RelaxCalc`` using ``self.calculator`` and the
+        merged kwargs each call. Callers that need to reuse a relaxer for
+        downstream relaxations (deformed cells, elemental references, ...)
+        should hold their own ``RelaxCalc`` instance and use it directly.
 
         Args:
             structure: Input structure (already extracted from the result dict).
             result: The current result dict; relaxation outputs are merged in.
-            relaxer: Pre-configured ``RelaxCalc``-like instance. Mutually
-                exclusive with ``relax_kwargs``.
-            **relax_kwargs: Forwarded to ``RelaxCalc`` when ``relaxer`` is None.
-                ``relax_calc_kwargs`` on the subclass (if any) takes precedence
-                over these, mirroring the existing per-calc convention.
+            **relax_kwargs: Forwarded to ``RelaxCalc``. ``relax_calc_kwargs``
+                on the subclass (if any) takes precedence over these, mirroring
+                the existing per-calc convention.
 
         Returns:
             ``(result, structure)`` — both updated when a relaxation ran, both
@@ -131,13 +126,12 @@ class PropCalc(abc.ABC):
         """
         if not getattr(self, "relax_structure", False):
             return result, structure
-        if relaxer is None:
-            # Lazy import: RelaxCalc imports from _base, so we can't import it
-            # at module scope without a circular import.
-            from ._relaxation import RelaxCalc
+        # Lazy import: RelaxCalc imports from _base, so we can't import it
+        # at module scope without a circular import.
+        from ._relaxation import RelaxCalc
 
-            extra = getattr(self, "relax_calc_kwargs", None) or {}
-            relaxer = RelaxCalc(self.calculator, **{**relax_kwargs, **extra})
+        extra = getattr(self, "relax_calc_kwargs", None) or {}
+        relaxer = RelaxCalc(self.calculator, **{**relax_kwargs, **extra})
         relax_result = relaxer.calc(structure)
         if not relax_result.get("is_converged", True):
             raise RuntimeError(

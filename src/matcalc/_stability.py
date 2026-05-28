@@ -81,6 +81,14 @@ class EnergeticsCalc(PropCalc):
             and other keys from relaxation / PES when applicable.
         """
         result = super().calc(structure)
+        result, structure_in = self._prerelax(
+            result["final_structure"],
+            result,
+            fmax=self.fmax,
+            optimizer=self.optimizer,
+            perturb_distance=self.perturb_distance,
+        )
+        # Reused below for relaxing each elemental reference structure.
         relaxer = RelaxCalc(
             self.calculator,
             fmax=self.fmax,
@@ -88,7 +96,6 @@ class EnergeticsCalc(PropCalc):
             perturb_distance=self.perturb_distance,
             **(self.relax_calc_kwargs or {}),
         )
-        result, structure_in = self._prerelax(result["final_structure"], result, relaxer=relaxer)
         energy = result["energy"] if self.relax_structure else run_pes_calc(structure_in, self.calculator).energy
         nsites = len(structure_in)
 

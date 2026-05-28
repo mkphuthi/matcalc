@@ -109,7 +109,7 @@ class EOSCalc(PropCalc):
         result, raw_structure = self._prerelax(
             result["final_structure"],
             result,
-            relaxer=RelaxCalc(self.calculator, **relax_calc_kwargs),
+            **relax_calc_kwargs,
         )
         structure_in: Structure = to_pmg_structure(raw_structure)
 
