@@ -369,8 +369,9 @@ class QHACalc(PropCalc):
                 continue
             ha.append(phonon_result)
             scaled_structures.append(phonon_result["final_structure"])
-            volumes.append(volume)
-            electronic_energies.append(phonon_result.get("energy", relaxed_result.get("energy")))
+            volumes.append(phonon_result["phonon"].primitive.volume)
+            norm_factor = len(phonon_result["phonon"].primitive) / len(phonon_result["phonon"].unitcell)
+            electronic_energies.append(phonon_result.get("energy", relaxed_result["energy"]) * norm_factor)
             thermal_properties = phonon_result["thermal_properties"]
             free_energies.append(thermal_properties["free_energy"])
             entropies.append(thermal_properties["entropy"])
