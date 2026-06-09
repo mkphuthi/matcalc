@@ -197,7 +197,7 @@ class PhononCalc(PropCalc):
         }
         return result | {
             "phonon": phonon,
-            "thermal_properties": phonon.get_thermal_properties_dict(),
+            "thermal_properties": thermal_properties_dict,
             "frequencies": frequencies,
             "disp_supercells": disp_supercells,
             "_units": units_map,
