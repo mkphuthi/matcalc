@@ -172,6 +172,8 @@ class PhononCalc(PropCalc):
         self._check_imaginary_modes(frequencies)
 
         phonon.run_thermal_properties(t_step=self.t_step, t_max=self.t_max, t_min=self.t_min)
+        thermal_properties = phonon.thermal_properties
+        thermal_properties_dict = {"temperatures": thermal_properties.temperatures,"free_energy":thermal_properties.free_energy,"entropy":thermal_properties.entropy,"heat_capacity":thermal_properties.heat_capacity}
         if self.write_force_constants:
             write_force_constants(phonon.force_constants, filename=self.write_force_constants)  # type: ignore[arg-type]
         if self.write_band_structure:
@@ -227,8 +229,7 @@ class PhononCalc(PropCalc):
         phonon.forces = [run_pes_calc(supercell, self.calculator).forces for supercell in disp_supercells]
         phonon.produce_force_constants()
         phonon.run_mesh(with_eigenvectors=True)
-        mesh_dict = cast("dict[str, Any]", phonon.get_mesh_dict())
-        frequencies = mesh_dict["frequencies"]
+        frequencies = phonon.mesh.frequencies
         return phonon, frequencies, disp_supercells
 
     def _check_imaginary_modes(self, frequencies: np.ndarray) -> None:
