@@ -173,7 +173,12 @@ class PhononCalc(PropCalc):
 
         phonon.run_thermal_properties(t_step=self.t_step, t_max=self.t_max, t_min=self.t_min)
         thermal_properties = phonon.thermal_properties
-        thermal_properties_dict = {"temperatures": thermal_properties.temperatures,"free_energy":thermal_properties.free_energy,"entropy":thermal_properties.entropy,"heat_capacity":thermal_properties.heat_capacity}
+        thermal_properties_dict = {
+            "temperatures": thermal_properties.temperatures,
+            "free_energy": thermal_properties.free_energy,
+            "entropy": thermal_properties.entropy,
+            "heat_capacity": thermal_properties.heat_capacity,
+        }
         if self.write_force_constants:
             write_force_constants(phonon.force_constants, filename=self.write_force_constants)  # type: ignore[arg-type]
         if self.write_band_structure:
