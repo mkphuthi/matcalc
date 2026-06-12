@@ -213,7 +213,7 @@ class QHACalc(PropCalc):
             ``electronic_energies`` in eV, ``scaled_structures``), a ``pressures`` list (GPa),
             ``temperatures`` (K), and a ``qha_results`` list of per-pressure dicts each
             containing ``pressure`` (GPa), ``qha`` (``PhonopyQHA``),
-            ``thermal_expansion_coefficients`` (1/K), ``gibbs_free_energies`` (kJ/mol),
+            ``thermal_expansion_coefficients`` (1/K), ``gibbs_free_energies`` (eV),
             ``bulk_modulus_P`` (GPa), ``heat_capacity_P`` (J/(K*mol)), and
             ``gruneisen_parameters`` (dimensionless). When only a single pressure was
             requested the top-level dict also contains those keys directly for backward
@@ -296,7 +296,7 @@ class QHACalc(PropCalc):
             "volumes": "A^3",
             "electronic_energies": "eV",
             "thermal_expansion_coefficients": "1/K",
-            "gibbs_free_energies": "kJ/mol",
+            "gibbs_free_energies": "eV",
             "bulk_modulus_P": "GPa",
             "heat_capacity_P": "J/(K*mol)",
             "gruneisen_parameters": "dimensionless",
