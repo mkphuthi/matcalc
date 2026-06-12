@@ -135,7 +135,7 @@ def test_qha_calc(
     assert units["volumes"] == "A^3"
     assert units["electronic_energies"] == "eV"
     assert units["thermal_expansion_coefficients"] == "1/K"
-    assert units["gibbs_free_energies"] == "kJ/mol"
+    assert units["gibbs_free_energies"] == "eV"
     assert units["bulk_modulus_P"] == "GPa"
     assert units["heat_capacity_P"] == "J/(K*mol)"
     assert units["gruneisen_parameters"] == "dimensionless"
