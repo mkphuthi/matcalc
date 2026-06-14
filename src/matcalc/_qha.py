@@ -354,19 +354,13 @@ class QHACalc(PropCalc):
 
             # Collect properties
             volume = phonon_result["final_structure"].volume
-            volume_drift = np.abs(volume - scaled_structure.volume) / scaled_structure.volume
-            if volume_drift > 1e-4:  # noqa: PLR2004
-                logger.warning(
-                    "Scale factor %.3f: fixed-cell relaxation drifted volume by %.4f%% "
-                    "(expected %.4f Å³, got %.4f Å³). Skipping this scale factor; the QHA "
-                    "fit will use the remaining points. Loosen fmax or tighten the cell "
-                    "filter constraints if this happens often.",
-                    scale_factor,
-                    volume_drift * 100,
-                    scaled_structure.volume,
-                    volume,
+            if (
+                np.abs(volume - scaled_structure.volume) / scaled_structure.volume > 1e-4  # noqa: PLR2004
+            ):
+                raise ValueError(
+                    f"Somehow the volume changed during relaxation. This is a bug! Before: {scaled_structure.volume}. "
+                    f"After: {volume}"
                 )
-                continue
             ha.append(phonon_result)
             scaled_structures.append(phonon_result["final_structure"])
             volumes.append(phonon_result["phonon"].primitive.volume)
