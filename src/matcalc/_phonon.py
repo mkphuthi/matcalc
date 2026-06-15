@@ -173,6 +173,8 @@ class PhononCalc(PropCalc):
 
         phonon.run_thermal_properties(t_step=self.t_step, t_max=self.t_max, t_min=self.t_min)
         thermal_properties = phonon.thermal_properties
+        if thermal_properties is None:
+            raise RuntimeError("phonon.thermal_properties is None after run_thermal_properties")
         thermal_properties_dict = {
             "temperatures": thermal_properties.temperatures,
             "free_energy": thermal_properties.free_energy,
@@ -234,6 +236,8 @@ class PhononCalc(PropCalc):
         phonon.forces = [run_pes_calc(supercell, self.calculator).forces for supercell in disp_supercells]
         phonon.produce_force_constants()
         phonon.run_mesh(with_eigenvectors=True)
+        if phonon.mesh is None:
+            raise RuntimeError("phonon.mesh is None after run_mesh")
         frequencies = phonon.mesh.frequencies
         return phonon, frequencies, disp_supercells
 
