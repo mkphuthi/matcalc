@@ -238,7 +238,7 @@ class PhononCalc(PropCalc):
         phonon.run_mesh(with_eigenvectors=True)
         if phonon.mesh is None:
             raise RuntimeError("phonon.mesh is None after run_mesh")
-        frequencies = phonon.mesh.frequencies
+        frequencies = phonon.mesh.frequencies  # type: ignore[union-attr]
         return phonon, frequencies, disp_supercells
 
     def _check_imaginary_modes(self, frequencies: np.ndarray) -> None:
