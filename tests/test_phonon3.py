@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+pytest.importorskip("phono3py")
+
 from matcalc import Phonon3Calc
 
 if TYPE_CHECKING:

@@ -7,8 +7,12 @@ import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
-from phono3py import Phono3py
 from pymatgen.io.phonopy import get_phonopy_structure, get_pmg_structure
+
+try:
+    from phono3py import Phono3py
+except ImportError as exc:
+    raise ImportError("phono3py is required for Phonon3Calc. Install with: pip install matcalc[phonon]") from exc
 
 from ._base import PropCalc
 from .backend import run_pes_calc
