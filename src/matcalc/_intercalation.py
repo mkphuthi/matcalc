@@ -8,15 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from ase.calculators.singlepoint import SinglePointCalculator
-from ase.io import write
 from monty.serialization import dumpfn
 from pymatgen.transformations.site_transformations import RemoveSitesTransformation
 from tqdm import tqdm
 
 from ._base import PropCalc
-from ._relaxation import RelaxCalc
-from .utils import to_ase_atoms, to_pmg_structure
+from ._mc import MCCalc
+from .utils import to_pmg_structure
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,45 +27,42 @@ if TYPE_CHECKING:
 # benign RuntimeWarning whenever its error estimate is non-zero, even at ~1e-13. Silence it.
 warnings.filterwarnings("ignore", message="logm result may be inaccurate")
 
-# Boltzmann constant in eV/K.
-_KB = 8.617330337217213e-05
 
-
-def _boltzmann_weight(e1: float, e0: float, temperature: float) -> float:
+class _RemoveKSites:
     """
-    Compute the Metropolis-Hastings acceptance weight ``exp(-(e1 - e0) / (kB * T))``.
+    Transformation that removes ``k`` randomly chosen sites from a fixed candidate set.
 
-    :param e1: Energy of the proposed configuration in eV.
-    :type e1: float
-    :param e0: Energy of the current configuration in eV.
-    :type e0: float
-    :param temperature: Temperature in Kelvin.
-    :type temperature: float
-    :return: The Boltzmann acceptance weight.
-    :rtype: float
+    Sites are drawn without replacement so that exactly ``k`` distinct sites are removed on
+    every call. Intended to be driven by :class:`MCCalc` with ``transform_initial=True`` so that
+    each proposal removes ``k`` ions from the pristine structure (fixed-concentration sampling).
     """
-    return float(np.exp(-(e1 - e0) / (_KB * temperature)))
 
+    def __init__(self, indices: Sequence[int], k: int, rng: np.random.Generator) -> None:
+        """
+        Initialize the transformation.
 
-def _atoms_from_results(results: dict[str, Any]) -> Atoms:
-    """
-    Build an ASE ``Atoms`` carrying a ``SinglePointCalculator`` from a results dict.
+        :param indices: Candidate site indices eligible for removal.
+        :type indices: Sequence[int]
+        :param k: Number of sites to remove on each call.
+        :type k: int
+        :param rng: Random number generator used to choose which sites to remove.
+        :type rng: numpy.random.Generator
+        """
+        self.indices = indices
+        self.k = k
+        self.rng = rng
 
-    :param results: A results dictionary containing ``final_structure``, ``energy``,
-        ``forces`` and ``stress`` keys (as returned by :class:`RelaxCalc`).
-    :type results: dict[str, Any]
-    :return: An ``Atoms`` object with energy/forces/stress attached, suitable for writing
-        to an ASE trajectory.
-    :rtype: Atoms
-    """
-    atoms = to_ase_atoms(results["final_structure"])
-    atoms.calc = SinglePointCalculator(
-        atoms,
-        energy=results["energy"],
-        forces=results["forces"],
-        stress=results["stress"],
-    )
-    return atoms
+    def apply_transformation(self, structure: Structure) -> Structure:
+        """
+        Return a copy of ``structure`` with ``k`` randomly chosen sites removed.
+
+        :param structure: The structure to deintercalate.
+        :type structure: Structure
+        :return: A new structure with the selected sites removed.
+        :rtype: Structure
+        """
+        indices_to_remove = self.rng.choice(self.indices, self.k, replace=False)
+        return RemoveSitesTransformation(indices_to_remove).apply_transformation(structure)
 
 
 class IntercalationCalc(PropCalc):
@@ -76,10 +71,10 @@ class IntercalationCalc(PropCalc):
 
     For each target concentration derived from ``concentration_range``, a number ``k`` of
     intercalating ions is removed from the (optionally supercelled) host structure and the
-    resulting configuration is scored by a single-point energy or a relaxation. Configurations
-    are sampled with a Metropolis-Hastings acceptance criterion, and the accepted energies are
-    used downstream to predict voltage profiles. A trajectory is written per concentration level
-    and the per-level results are serialized to ``results.json.gz``.
+    resulting configurations are sampled with an :class:`MCCalc` Metropolis-Hastings run at fixed
+    composition. The accepted energies are used downstream to predict voltage profiles. A
+    trajectory is written per concentration level and the per-level results are serialized to
+    ``results.json.gz``.
 
     :param calculator: An ASE calculator object used to perform energy and force
         calculations. If a string is provided, the corresponding universal calculator is loaded.
@@ -153,26 +148,6 @@ class IntercalationCalc(PropCalc):
         self.seed = seed
         self._rng = np.random.default_rng(self.seed)
 
-    def _remove_k(self, structure: Structure, indices: Sequence[int], k: int) -> Structure:
-        """
-        Return a copy of ``structure`` with ``k`` randomly chosen sites removed.
-
-        Sites are drawn without replacement from ``indices`` so that exactly ``k`` distinct
-        sites are removed.
-
-        :param structure: The structure to deintercalate.
-        :type structure: Structure
-        :param indices: Candidate site indices eligible for removal.
-        :type indices: Sequence[int]
-        :param k: Number of sites to remove.
-        :type k: int
-        :return: A new structure with the selected sites removed.
-        :rtype: Structure
-        """
-        indices_to_remove = self._rng.choice(indices, k, replace=False)
-        transformation = RemoveSitesTransformation(indices_to_remove)
-        return transformation.apply_transformation(structure)
-
     def calc(
         self,
         structure: Structure | Atoms,
@@ -183,7 +158,8 @@ class IntercalationCalc(PropCalc):
         :param structure: The fully occupied host structure to deintercalate.
         :type structure: Structure | Atoms
         :return: A dictionary keyed by concentration index, each value being the accepted
-            configuration's results augmented with ``Acceptance Ratio`` and ``Num_removed``.
+            configuration's :class:`MCCalc` results augmented with ``Num_removed`` and
+            ``concentration``.
         :rtype: dict[str, Any]
         :raises ValueError: If neither or both of ``species`` and ``indices`` are provided, or if
             ``supercell`` is combined with explicit ``indices``.
@@ -201,51 +177,31 @@ class IntercalationCalc(PropCalc):
 
         assert self.indices is not None  # noqa: S101  # resolved above; satisfies type checker
 
-        relax_kwargs = dict(self.relax_calc_kwargs)
-        max_steps = relax_kwargs.pop("max_steps", 200)
-        optimizer = relax_kwargs.pop("optimizer", "FIRE")
-        fmax = relax_kwargs.pop("fmax", 0.02)
-        if not self.relax:
-            max_steps = 0
-
-        relaxer = RelaxCalc(
-            self.calculator,
-            optimizer=optimizer,
-            fmax=fmax,
-            max_steps=max_steps,
-            **relax_kwargs,
-        )
-
         n_indices = len(self.indices)
         concentrations = np.arange(*self.concentration_range)
         ks = np.unique(np.round(concentrations * n_indices)).astype(int)
 
         results = {}
-        k_iter = tqdm(ks, desc="concentration levels")
-        for ik, k in enumerate(k_iter):
+        for ik, k in enumerate(tqdm(ks, desc="concentration levels")):
             concentration = k / n_indices
-            k_iter.set_postfix(k=int(k))
             traj_path = Path(self.trajfile)
             k_trajfile = str(traj_path.with_name(f"{traj_path.stem}_k{int(k)}{traj_path.suffix}"))
 
-            prev_results = relaxer.calc(self._remove_k(structure, self.indices, k))
-            trajectory = [_atoms_from_results(prev_results)]
-            n_accepted = 0
-            for i in tqdm(range(self.nsteps), desc=f"k={int(k)}, c={concentration:.3f}", leave=False):
-                relax_results = relaxer.calc(self._remove_k(structure, self.indices, k))
-                cur_e = relax_results["energy"]
-                prev_e = prev_results["energy"]
-                weight = _boltzmann_weight(cur_e, prev_e, self.temperature)
-                if (cur_e - prev_e) < 0 or self._rng.random() < weight:
-                    prev_results = relax_results
-                    n_accepted += 1
-
-                if i % self.save_freq == 0:
-                    trajectory.append(_atoms_from_results(relax_results))
-                    write(k_trajfile, trajectory)
-
-            results[f"{ik}"] = prev_results | {
-                "Acceptance Ratio": n_accepted / self.nsteps,
+            transformation = _RemoveKSites(self.indices, int(k), self._rng)
+            mc = MCCalc(
+                self.calculator,
+                transformation,
+                transform_initial=True,
+                nsteps=self.nsteps,
+                temperature=self.temperature,
+                save_freq=self.save_freq,
+                trajfile=k_trajfile,
+                relax=self.relax,
+                seed=self.seed,
+                relax_calc_kwargs=self.relax_calc_kwargs,
+            )
+            mc_results = mc.calc(structure)
+            results[f"{ik}"] = mc_results | {
                 "Num_removed": int(k),
                 "concentration": concentration,
             }
