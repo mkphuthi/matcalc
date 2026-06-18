@@ -43,6 +43,7 @@ def test_mc_single_point(Cu_supercell: Structure, emt_calculator: Calculator) ->
     assert results["final_structure"].composition.formula == "Cu29"
     assert results["energy"] == pytest.approx(SINGLE_POINT_ENERGY, rel=1e-6)
     assert results["acceptance_ratio"] == pytest.approx(0.4)
+    assert results["min_energy"] <= results["energy"]
     assert len(mc.trajectory) == 6  # 1 initial frame + nsteps frames at save_freq=1
 
 

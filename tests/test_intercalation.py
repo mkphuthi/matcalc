@@ -14,6 +14,7 @@ from pymatgen.core import Structure
 from matcalc import IntercalationCalc
 
 if TYPE_CHECKING:
+    from ase import Atoms
     from ase.calculators.calculator import Calculator
 
 RELAX_KWARGS = {"relax_cell": False}
@@ -168,11 +169,12 @@ def test_intercalation_markov(Cu: Structure, emt_calculator: Calculator) -> None
     assert res["concentration"] == pytest.approx(3 / 32)
     assert res["final_structure"].composition.formula == "Cu29"
     assert res["energy"] == pytest.approx(3.2843720430568393, rel=1e-6)
+    assert res["min_energy"] <= res["energy"]
 
     frames = read("ic_markov_k3.traj", ":")
     assert {atoms.get_chemical_formula() for atoms in frames} == {"Cu29"}
 
-    def occupancy(atoms: object) -> set:
+    def occupancy(atoms: Atoms) -> set:
         return {tuple(coord) for coord in np.round(atoms.get_scaled_positions(), 3).tolist()}
 
     moves = [len(occupancy(frames[i]) ^ occupancy(frames[i + 1])) for i in range(len(frames) - 1)]

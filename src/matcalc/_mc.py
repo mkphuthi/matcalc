@@ -55,7 +55,8 @@ class MCCalc(PropCalc):
     every step, so all sampled configurations share a fixed composition (configurational
     sampling at a single concentration); otherwise it is applied to the current state,
     yielding a random walk in configuration space. The trajectory and acceptance ratio are
-    recorded every ``save_freq`` steps.
+    recorded every ``save_freq`` steps, and the lowest-energy configuration visited is tracked
+    (``min_energy`` / ``min_structure``).
 
     :param calculator: An ASE calculator object used to perform energy and force
         calculations. If a string is provided, the corresponding universal calculator is loaded.
@@ -122,10 +123,13 @@ class MCCalc(PropCalc):
         self.transform_initial = transform_initial
         self.trajectory: list[Atoms] = []
         self.acceptance_ratio = 0.0
+        self.min_energy: float | None = None
+        self.min_structure: Structure | None = None
         self._n_accepted = 0
         self._structure: Structure | None = None
         self._initial_structure: Structure | None = None
         self._results: dict[str, Any] | None = None
+        self._min_results: dict[str, Any] | None = None
 
     def _score(self, structure: Structure) -> dict[str, Any]:
         """
@@ -162,6 +166,8 @@ class MCCalc(PropCalc):
         else:
             proposal = self.transformation.apply_transformation(self._structure)
         results = self._score(proposal)
+        if results["energy"] < self._min_results["energy"]:
+            self._min_results = results
         delta = results["energy"] - self._results["energy"]
         accept = delta < 0 or self._rng.random() < np.exp(-delta / (KB * self.temperature))
         if accept:
@@ -185,7 +191,8 @@ class MCCalc(PropCalc):
 
         :param structure: The starting structure to sample from.
         :type structure: Structure | Atoms
-        :return: The final accepted configuration's results augmented with ``acceptance_ratio``.
+        :return: The final accepted configuration's results augmented with ``acceptance_ratio`` and
+            the lowest-energy configuration visited (``min_energy`` and ``min_structure``).
         :rtype: dict[str, Any]
         :raises ValueError: If ``ensemble`` is not a recognized value.
         """
@@ -195,6 +202,7 @@ class MCCalc(PropCalc):
         else:
             self._structure = self._initial_structure
         self._results = self._score(self._structure)
+        self._min_results = self._results
         self.trajectory = [_atoms_from_results(self._results)]
         if self.ensemble == "canonical":
             step = self.step_canonical
@@ -208,4 +216,10 @@ class MCCalc(PropCalc):
                 self.trajectory.append(_atoms_from_results(self._results))
                 write(self.trajfile, self.trajectory)
         self.acceptance_ratio = self._n_accepted / self.nsteps
-        return self._results | {"acceptance_ratio": self.acceptance_ratio}
+        self.min_energy = self._min_results["energy"]
+        self.min_structure = self._min_results["final_structure"]
+        return self._results | {
+            "acceptance_ratio": self.acceptance_ratio,
+            "min_energy": self.min_energy,
+            "min_structure": self.min_structure,
+        }
