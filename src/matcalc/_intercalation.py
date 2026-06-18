@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 # benign RuntimeWarning whenever its error estimate is non-zero, even at ~1e-13. Silence it.
 warnings.filterwarnings("ignore", message="logm result may be inaccurate")
 
+# Number of species on a binary (species <-> species) active site.
+_BINARY_SPECIES = 2
+
 
 class _RemoveKSites:
     """
@@ -63,6 +66,135 @@ class _RemoveKSites:
         """
         indices_to_remove = self.rng.choice(self.indices, self.k, replace=False)
         return RemoveSitesTransformation(indices_to_remove).apply_transformation(structure)
+
+
+class _SwapSites:
+    """
+    Composition-conserving swap move on a configurable sublattice (a true MCMC move).
+
+    Given an ``ordered_structure`` (the fully occupied host) and a ``disordered_structure``
+    (the *same cell* with partial occupancy marking the configurable sublattice), each call
+    relocates ``n_swaps`` (``l``) occupants among the active sites:
+
+    - **species ↔ vacancy** (active site has one species with occupancy < 1): ``l`` occupied
+      sites are vacated and ``l`` vacant sites are filled, conserving the species count.
+    - **species ↔ species** (active site has two species summing to 1): ``l`` pairs exchange
+      identity, conserving each species count.
+
+    Because the move is a local perturbation of the *current* configuration and conserves
+    composition, driving it with :class:`MCCalc` and ``transform_initial=False`` yields a true
+    canonical Markov chain. The two structures must share the same lattice and sites; the
+    disordered structure's partially occupied (``not site.is_ordered``) sites define the
+    active sublattice.
+    """
+
+    def __init__(
+        self,
+        ordered_structure: Structure,
+        disordered_structure: Structure,
+        n_swaps: int,
+        rng: np.random.Generator,
+        *,
+        tol: float = 1.0,
+    ) -> None:
+        """
+        Initialize the swap transformation.
+
+        :param ordered_structure: The fully occupied host providing the active-site positions and
+            inert framework.
+        :type ordered_structure: Structure
+        :param disordered_structure: The same cell with partial occupancy marking the configurable
+            sublattice (its ``not site.is_ordered`` sites define the active sublattice and states).
+        :type disordered_structure: Structure
+        :param n_swaps: Number of sites to swap on each call (``l``).
+        :type n_swaps: int
+        :param rng: Random number generator used to choose which sites to swap.
+        :type rng: numpy.random.Generator
+        :param tol: Distance tolerance in Å for mapping current sites onto the active sublattice.
+        :type tol: float, optional
+        :raises ValueError: If the structures differ in size, there are no active sites, or the
+            active sites have an unsupported number of species.
+        """
+        if len(ordered_structure) != len(disordered_structure):
+            raise ValueError("ordered_structure and disordered_structure must have the same sites")
+        self.lattice = ordered_structure.lattice
+        self.n_swaps = n_swaps
+        self.rng = rng
+        self.tol = tol
+
+        self.active_idx = [i for i, site in enumerate(disordered_structure) if not site.is_ordered]
+        if not self.active_idx:
+            raise ValueError("disordered_structure has no disordered (active) sites")
+        self.active_fcoords = ordered_structure.frac_coords[self.active_idx]
+
+        elements = [el.symbol for el in disordered_structure[self.active_idx[0]].species.elements]
+        if len(elements) == 1:
+            self.species_a: str = elements[0]  # species <-> vacancy
+            self.species_b: str | None = None
+        elif len(elements) == _BINARY_SPECIES:
+            self.species_a, self.species_b = elements  # species <-> species
+        else:
+            raise ValueError("active sites must have one (species/vacancy) or two (binary species)")
+
+    def _match(self, fcoords: np.ndarray) -> np.ndarray:
+        """Map fractional coords to the nearest active-sublattice positions (list indices 0..M-1)."""
+        dists = self.lattice.get_all_distances(fcoords, self.active_fcoords)
+        nearest = dists.argmin(axis=1)
+        if (dists[np.arange(len(fcoords)), nearest] > self.tol).any():
+            raise ValueError("could not map a site onto the active sublattice within tolerance")
+        return nearest
+
+    def apply_transformation(self, structure: Structure) -> Structure:
+        """
+        Return a copy of ``structure`` with ``n_swaps`` sites swapped on the active sublattice.
+
+        :param structure: The current configuration (an ordered structure at the target composition).
+        :type structure: Structure
+        :return: A new configuration differing by the swap move, with composition conserved.
+        :rtype: Structure
+        """
+        if self.species_b is None:
+            return self._swap_vacancy(structure)
+        return self._swap_binary(structure)
+
+    def _swap_vacancy(self, structure: Structure) -> Structure:
+        occ_current = [i for i, site in enumerate(structure) if site.specie.symbol == self.species_a]
+        occ_pos = self._match(structure.frac_coords[occ_current])
+        pos_to_current = dict(zip(occ_pos.tolist(), occ_current, strict=True))
+        occupied = sorted(pos_to_current)
+        vacant = [p for p in range(len(self.active_idx)) if p not in pos_to_current]
+        if self.n_swaps > min(len(occupied), len(vacant)):
+            raise ValueError(f"n_swaps={self.n_swaps} exceeds available occupied/vacant active sites")
+
+        chosen_occ = self.rng.choice(occupied, self.n_swaps, replace=False)
+        chosen_vac = self.rng.choice(vacant, self.n_swaps, replace=False)
+
+        new = structure.copy()
+        new.remove_sites(sorted((pos_to_current[int(p)] for p in chosen_occ), reverse=True))
+        for p in chosen_vac:
+            new.append(self.species_a, self.active_fcoords[int(p)], coords_are_cartesian=False)
+        return new
+
+    def _swap_binary(self, structure: Structure) -> Structure:
+        swap_current = [
+            i for i, site in enumerate(structure) if site.specie.symbol in (self.species_a, self.species_b)
+        ]
+        pos = self._match(structure.frac_coords[swap_current])
+        pos_to_current = {int(p): ci for p, ci in zip(pos.tolist(), swap_current, strict=True)}
+        a_positions = [p for p, ci in pos_to_current.items() if structure[ci].specie.symbol == self.species_a]
+        b_positions = [p for p, ci in pos_to_current.items() if structure[ci].specie.symbol == self.species_b]
+        if self.n_swaps > min(len(a_positions), len(b_positions)):
+            raise ValueError(f"n_swaps={self.n_swaps} exceeds available {self.species_a}/{self.species_b} sites")
+
+        chosen_a = self.rng.choice(a_positions, self.n_swaps, replace=False)
+        chosen_b = self.rng.choice(b_positions, self.n_swaps, replace=False)
+
+        new = structure.copy()
+        for p in chosen_a:
+            new.replace(pos_to_current[int(p)], self.species_b)
+        for p in chosen_b:
+            new.replace(pos_to_current[int(p)], self.species_a)
+        return new
 
 
 class IntercalationCalc(PropCalc):
