@@ -137,11 +137,12 @@ class MCCalc(PropCalc):
         :rtype: dict[str, Any]
         """
         kwargs = dict(self.relax_calc_kwargs)
+        max_steps = kwargs.pop("max_steps", 200) if self.relax else kwargs.pop("max_steps", 0)
         relaxer = RelaxCalc(
             self.calculator,
             optimizer=kwargs.pop("optimizer", "FIRE"),
             fmax=kwargs.pop("fmax", 0.02),
-            max_steps=kwargs.pop("max_steps", 200) if self.relax else 0,
+            max_steps=max_steps,
             **kwargs,
         )
         return relaxer.calc(structure)
