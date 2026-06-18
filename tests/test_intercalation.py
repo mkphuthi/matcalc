@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 from ase.io import read
 from monty.serialization import loadfn
@@ -142,3 +143,37 @@ def test_intercalation_validation(
     )
     with pytest.raises(ValueError, match=match):
         calc.calc(Cu.copy())
+
+
+def test_intercalation_markov(Cu: Structure, emt_calculator: Calculator) -> None:
+    """Markov mode samples a true local chain (one swap per accepted step) at fixed composition."""
+    calc = IntercalationCalc(
+        emt_calculator,
+        nsteps=6,
+        temperature=2000,
+        concentration_range=[0.09, 0.10, 0.05],
+        save_freq=1,
+        species="Cu",
+        relax=False,
+        seed=42,
+        supercell=[2, 2, 2],
+        algorithm="markov",
+        swap_size=1,
+        trajfile="ic_markov.traj",
+        relax_calc_kwargs=RELAX_KWARGS,
+    )
+    res = calc.calc(Cu.copy())["0"]
+
+    assert res["Num_removed"] == 3
+    assert res["concentration"] == pytest.approx(3 / 32)
+    assert res["final_structure"].composition.formula == "Cu29"
+    assert res["energy"] == pytest.approx(3.2843720430568393, rel=1e-6)
+
+    frames = read("ic_markov_k3.traj", ":")
+    assert {atoms.get_chemical_formula() for atoms in frames} == {"Cu29"}
+
+    def occupancy(atoms: object) -> set:
+        return {tuple(coord) for coord in np.round(atoms.get_scaled_positions(), 3).tolist()}
+
+    moves = [len(occupancy(frames[i]) ^ occupancy(frames[i + 1])) for i in range(len(frames) - 1)]
+    assert max(moves) <= 2  # each accepted step relocates at most one Cu (a local swap)

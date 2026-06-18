@@ -5,10 +5,11 @@ from __future__ import annotations
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from monty.serialization import dumpfn
+from pymatgen.core import Structure
 from pymatgen.transformations.site_transformations import RemoveSitesTransformation
 from tqdm import tqdm
 
@@ -21,7 +22,6 @@ if TYPE_CHECKING:
 
     from ase import Atoms
     from ase.calculators.calculator import Calculator
-    from pymatgen.core import Structure
 
 # scipy.linalg.logm (called by ASE's FrechetCellFilter on every relaxation step) emits a
 # benign RuntimeWarning whenever its error estimate is non-zero, even at ~1e-13. Silence it.
@@ -197,6 +197,25 @@ class _SwapSites:
         return new
 
 
+def _build_disordered(structure: Structure, species: str | None) -> Structure:
+    """
+    Build a disordered structure marking the ``species`` sublattice as active (species/vacancy).
+
+    :param structure: The fully occupied host structure.
+    :type structure: Structure
+    :param species: Symbol of the active (swappable) species.
+    :type species: str | None
+    :return: A copy with the ``species`` sites given partial occupancy (active) and the rest left
+        fully occupied (inert framework).
+    :rtype: Structure
+    :raises ValueError: If ``species`` is not set.
+    """
+    if species is None:
+        raise ValueError("algorithm='markov' without disordered_structure requires species")
+    occupancies = [{species: 0.5} if site.specie.symbol == species else site.species for site in structure]
+    return Structure(structure.lattice, occupancies, structure.frac_coords)
+
+
 class IntercalationCalc(PropCalc):
     """
     Calculator for intercalation and voltage-profile predictions via Monte Carlo.
@@ -226,6 +245,9 @@ class IntercalationCalc(PropCalc):
         relax: bool = True,
         species: str | None = None,
         indices: Sequence[int] | None = None,
+        algorithm: Literal["independent", "markov"] = "independent",
+        disordered_structure: Structure | None = None,
+        swap_size: int = 1,
         seed: int | None = None,
         relax_calc_kwargs: dict[str, Any] | None = None,
     ) -> None:
@@ -260,6 +282,17 @@ class IntercalationCalc(PropCalc):
         :param indices: Explicit site indices eligible for removal. Mutually exclusive with
             ``species``. Default is None.
         :type indices: Sequence[int] | None, optional
+        :param algorithm: Sampling algorithm. ``"independent"`` draws each proposal afresh from the
+            pristine host (fixed-concentration independent sampling); ``"markov"`` runs a true
+            Metropolis Markov chain of local swap moves (requires ``species`` or
+            ``disordered_structure``). Default is ``"independent"``.
+        :type algorithm: Literal["independent", "markov"], optional
+        :param disordered_structure: For ``algorithm="markov"``, a structure on the same cell as the
+            (supercelled) host whose partially occupied sites define the active sublattice. If omitted,
+            one is built from ``species`` (species/vacancy). Default is None.
+        :type disordered_structure: Structure | None, optional
+        :param swap_size: Number of sites swapped per Markov step (``l``). Default is 1.
+        :type swap_size: int, optional
         :param seed: Seed for the random number generator, for reproducible sampling. Default is None.
         :type seed: int | None, optional
         :param relax_calc_kwargs: Additional keyword arguments passed to :class:`RelaxCalc`.
@@ -275,6 +308,9 @@ class IntercalationCalc(PropCalc):
         self.trajfile = trajfile or f"traj-{datetime.now().strftime('%H%Mhrs_%d-%m-%Y')}.traj"
         self.species = species
         self.indices = indices
+        self.algorithm = algorithm
+        self.disordered_structure = disordered_structure
+        self.swap_size = swap_size
         self.relax = relax
         self.relax_calc_kwargs = relax_calc_kwargs or {}
         self.seed = seed
@@ -309,6 +345,10 @@ class IntercalationCalc(PropCalc):
 
         assert self.indices is not None  # noqa: S101  # resolved above; satisfies type checker
 
+        disordered = None
+        if self.algorithm == "markov":
+            disordered = self.disordered_structure or _build_disordered(structure, self.species)
+
         n_indices = len(self.indices)
         concentrations = np.arange(*self.concentration_range)
         ks = np.unique(np.round(concentrations * n_indices)).astype(int)
@@ -319,11 +359,23 @@ class IntercalationCalc(PropCalc):
             traj_path = Path(self.trajfile)
             k_trajfile = str(traj_path.with_name(f"{traj_path.stem}_k{int(k)}{traj_path.suffix}"))
 
-            transformation = _RemoveKSites(self.indices, int(k), self._rng)
+            if self.algorithm == "independent":
+                # Independent fixed-concentration sampling: each proposal removes k from the pristine host.
+                transformation: Any = _RemoveKSites(self.indices, int(k), self._rng)
+                transform_initial = True
+                mc_structure = structure
+            elif self.algorithm == "markov":
+                # True Markov chain: seed a configuration at concentration k, then swap-move locally.
+                transformation = _SwapSites(structure, disordered, self.swap_size, self._rng)
+                transform_initial = False
+                mc_structure = _RemoveKSites(self.indices, int(k), self._rng).apply_transformation(structure)
+            else:
+                raise ValueError("algorithm must be one of {'independent', 'markov'}")
+
             mc = MCCalc(
                 self.calculator,
                 transformation,
-                transform_initial=True,
+                transform_initial=transform_initial,
                 nsteps=self.nsteps,
                 temperature=self.temperature,
                 save_freq=self.save_freq,
@@ -332,7 +384,7 @@ class IntercalationCalc(PropCalc):
                 seed=self.seed,
                 relax_calc_kwargs=self.relax_calc_kwargs,
             )
-            mc_results = mc.calc(structure)
+            mc_results = mc.calc(mc_structure)
             results[f"{ik}"] = mc_results | {
                 "Num_removed": int(k),
                 "concentration": concentration,
