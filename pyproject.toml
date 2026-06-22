@@ -96,7 +96,7 @@ ci = [
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
     "seekpath>=2.1.0",
-    "phono3py @ git+https://github.com/phonopy/phono3py.git",
+    "phono3py>=4.2.0",
 ]
 
 [project.scripts]
