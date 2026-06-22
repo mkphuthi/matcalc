@@ -118,3 +118,34 @@ def test_order_calc_invalid_args(matpes_calculator: PESCalculator, kwargs: dict,
     """Out-of-range constructor arguments are rejected."""
     with pytest.raises(ValueError, match=match):
         OrderCalc(matpes_calculator, **kwargs)
+
+
+def test_order_calc_incommensurate_occupancy(matpes_calculator: PESCalculator) -> None:
+    """Occupancy that doesn't map to an integer atom count raises ValueError."""
+    incommensurate = Structure(
+        Lattice.cubic(4.0),
+        [{"Cu": 1 / 3}, {"Cu": 1 / 3}],
+        [[0, 0, 0], [0.5, 0.5, 0]],
+    )
+    with pytest.raises(ValueError, match="not commensurate with an integer"):
+        OrderCalc(matpes_calculator, nsteps=1).calc(incommensurate)
+
+
+def test_order_calc_single_species_no_swap(matpes_calculator: PESCalculator) -> None:
+    """All disordered sites holding a single species (no swappable pairs) raises ValueError."""
+    # Cu 0.99999 on 2 sites: total = 1.99998, rounds to 2 (within tol).
+    # Both tokens are Cu -> no distinct partner exists for any swap.
+    single_species = Structure(
+        Lattice.cubic(4.0),
+        [{"Cu": 0.99999}, {"Cu": 0.99999}],
+        [[0, 0, 0], [0.5, 0.5, 0]],
+    )
+    with pytest.raises(ValueError, match="only one species"):
+        OrderCalc(matpes_calculator, nsteps=1).calc(single_species)
+
+
+def test_order_calc_relax_structure(disordered_CuAu: Structure, matpes_calculator: PESCalculator) -> None:
+    """relax_structure=True relaxes the best ordering before returning."""
+    result = OrderCalc(matpes_calculator, nsteps=5, seed=42, relax_structure=True).calc(disordered_CuAu)
+    assert result["final_structure"].is_ordered
+    assert result.get("is_converged") is True

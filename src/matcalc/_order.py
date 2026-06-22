@@ -161,7 +161,7 @@ class OrderCalc(PropCalc):
             counts[sp] = rounded
 
         n_atoms = sum(counts.values())
-        if n_atoms > n_sites:
+        if n_atoms > n_sites:  # pragma: no cover
             raise ValueError(f"Rounded species count ({n_atoms}) exceeds the number of disordered sites ({n_sites}).")
 
         tokens: list[Species | None] = []
@@ -348,6 +348,6 @@ class OrderCalc(PropCalc):
         )
 
         if self.relax_structure:
-            result, _ = self._prerelax(best_structure, result, **(self.relax_calc_kwargs or {}))
+            result, _ = self._check_and_prelax(best_structure, result, **(self.relax_calc_kwargs or {}))
 
         return result
