@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
-from tqdm import tqdm
 
 import numpy as np
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import write
+from tqdm import tqdm
 
 from ._base import PropCalc
 from ._relaxation import RelaxCalc
@@ -67,9 +67,9 @@ class MCCalc(PropCalc):
         self,
         calculator: Calculator | str,
         transformation: Any,
-        transform_initial: bool,
-        ensemble: Literal["canonical","grand_canonical"] = "canonical",
+        ensemble: Literal["canonical", "grand_canonical"] = "canonical",
         *,
+        transform_initial: bool,
         nsteps: int = 100,
         temperature: float = 300,
         save_freq: int = 10,
@@ -128,8 +128,8 @@ class MCCalc(PropCalc):
         self._n_accepted = 0
         self._structure: Structure | None = None
         self._initial_structure: Structure | None = None
-        self._results: dict[str, Any] | None = None
-        self._min_results: dict[str, Any] | None = None
+        self._results: dict[str, Any] = {}
+        self._min_results: dict[str, Any] = {}
 
     def _score(self, structure: Structure) -> dict[str, Any]:
         """

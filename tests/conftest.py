@@ -15,10 +15,9 @@ import os
 from typing import TYPE_CHECKING
 
 import pytest
-from pymatgen.util.testing import PymatgenTest
-
 from ase.build import bulk
 from ase.calculators.emt import EMT
+from pymatgen.util.testing import PymatgenTest
 
 import matcalc
 from matcalc.utils import PESCalculator, to_ase_atoms, to_pmg_structure

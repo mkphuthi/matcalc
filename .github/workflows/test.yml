@@ -33,7 +33,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y curl
-          
+
           pip install dgl==2.4.0 -f https://data.dgl.ai/wheels/torch-2.4/repo.html
           pip install -e '.[ci]'
           pip install "setuptools<82"  # Required by maml (pkg_resources)

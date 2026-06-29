@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -176,9 +176,7 @@ class _SwapSites:
         return new
 
     def _swap_binary(self, structure: Structure) -> Structure:
-        swap_current = [
-            i for i, site in enumerate(structure) if site.specie.symbol in (self.species_a, self.species_b)
-        ]
+        swap_current = [i for i, site in enumerate(structure) if site.specie.symbol in (self.species_a, self.species_b)]
         pos = self._match(structure.frac_coords[swap_current])
         pos_to_current = {int(p): ci for p, ci in zip(pos.tolist(), swap_current, strict=True)}
         a_positions = [p for p, ci in pos_to_current.items() if structure[ci].specie.symbol == self.species_a]
@@ -305,7 +303,7 @@ class IntercalationCalc(PropCalc):
         self.concentration_range = concentration_range
         self.supercell = supercell
         self.save_freq = save_freq
-        self.trajfile = trajfile or f"traj-{datetime.now().strftime('%H%Mhrs_%d-%m-%Y')}.traj"
+        self.trajfile = trajfile or f"traj-{datetime.now(tz=timezone.utc).strftime('%H%Mhrs_%d-%m-%Y')}.traj"
         self.species = species
         self.indices = indices
         self.algorithm = algorithm
