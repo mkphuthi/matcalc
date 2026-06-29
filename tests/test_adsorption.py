@@ -103,9 +103,9 @@ def test_adsorption_calc_adslabs(
     Pt_bulk: Slab,
     CO2: Molecule,
     matpes_calculator: PESCalculator,
-    relax_slab: bool,  # noqa: FBT001
-    relax_bulk: bool,  # noqa: FBT001
-    relax_adsorbate: bool,  # noqa: FBT001
+    relax_slab: bool,
+    relax_bulk: bool,
+    relax_adsorbate: bool,
     min_area_extent: tuple[float, float] | None,
 ) -> None:
     """Test adsorption calculation over multiple adsorption sites."""

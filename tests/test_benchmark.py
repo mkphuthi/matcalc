@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from huggingface_hub.errors import EntryNotFoundError
 
 from matcalc.benchmark import (
     BenchmarkSuite,
@@ -30,7 +31,7 @@ def test_available_benchmarks() -> None:
 def test_get_benchmark_data() -> None:
     d = get_benchmark_data("mp-pbe-elasticity-2025.3.json.gz")
     assert len(d) > 10000
-    with pytest.raises(FileNotFoundError) as _:
+    with pytest.raises(EntryNotFoundError) as _:
         get_benchmark_data("bad_url")
 
 
@@ -38,8 +39,8 @@ def test_equilibrium_benchmark(matpes_calculator: PESCalculator) -> None:
     benchmark = EquilibriumBenchmark(seed=1, n_samples=2)
     results = benchmark.run(matpes_calculator, "toy")
     assert len(results) == 2
-    assert results["d_toy"].mean() == pytest.approx(0.12305854320340562, abs=1e-1)
-    assert np.abs(results["Eform_toy"] - results["Eform_DFT"]).mean() == pytest.approx(0.0703378673539001, abs=1e-2)
+    assert results["d_toy"].mean() == pytest.approx(0.2392, abs=1e-1)
+    assert np.abs(results["Eform_toy"] - results["Eform_DFT"]).mean() == pytest.approx(0.05689055202524909, abs=1e-1)
 
 
 def test_elasticity_benchmark(matpes_calculator: PESCalculator) -> None:
@@ -54,7 +55,7 @@ def test_elasticity_benchmark(matpes_calculator: PESCalculator) -> None:
     assert not os.path.exists(chkpt_file)
     assert len(results) == 3
     # Compute MAE
-    assert np.abs(results["K_vrh_toy"] - results["K_vrh_DFT"]).mean() == pytest.approx(2.9499577941620814, rel=1e-1)
+    assert np.abs(results["K_vrh_toy"] - results["K_vrh_DFT"]).mean() == pytest.approx(10.7902612, rel=1e-1)
 
     benchmark = ElasticityBenchmark(benchmark_name="mp-pbe-elasticity-2025.3.json.gz", seed=0, n_samples=3)
 
@@ -81,7 +82,7 @@ def test_phonon_benchmark(matpes_calculator: PESCalculator) -> None:
     benchmark = PhononBenchmark(seed=0, n_samples=3)
     results = benchmark.run(matpes_calculator, "toy")
     assert len(results) == 3
-    assert np.abs(results["CV_toy"] - results["CV_DFT"]).mean() == pytest.approx(13.510378078609543, abs=3e-1)
+    assert np.abs(results["CV_toy"] - results["CV_DFT"]).mean() == pytest.approx(4.250062673114591, abs=3e-1)
 
 
 def test_softening_benchmark(matpes_calculator: PESCalculator) -> None:

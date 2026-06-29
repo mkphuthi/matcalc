@@ -29,6 +29,16 @@ class PropCalc(abc.ABC):
     on multiple structures using joblib.
     """
 
+    def __repr__(self) -> str:
+        """Concise repr — class name and the underlying calculator's class.
+
+        Useful for logging / reproducibility; subclasses can override to expose
+        their key knobs (e.g. fmax, supercell, scale_factors).
+        """
+        calc = getattr(self, "_pes_calculator", None)
+        calc_name = type(calc).__name__ if calc is not None else "<no calculator>"
+        return f"{type(self).__name__}(calculator={calc_name})"
+
     @property
     def calculator(self) -> Calculator:
         """
@@ -40,7 +50,7 @@ class PropCalc(abc.ABC):
         and controlled access to the underlying calculator.
 
         Returns:
-            Calculator: The internal `Calculator` instance.
+            The internal ASE calculator instance.
         """
         return self._pes_calculator
 
@@ -51,18 +61,88 @@ class PropCalc(abc.ABC):
         loads the universal PESCalculator using the given value. Otherwise, it sets
         the provided Calculator instance.
 
-        Parameters:
-            val (str | Calculator): The new value to assign to the calculator property.
-            It can either be a string representing a PESCalculator configuration or an
-            existing Calculator object.
-
-        Returns:
-            None
-
-        Exceptions:
-            None
+        Args:
+            val: Universal model name string or an existing ASE calculator instance.
         """
         self._pes_calculator = PESCalculator.load_universal(val) if isinstance(val, str) else val
+
+    @staticmethod
+    def _merge_units(
+        prev: dict[str, Any] | None,
+        new: dict[str, str],
+    ) -> dict[str, str]:
+        """Merge unit annotations, preserving upstream entries.
+
+        Use this when building the ``_units`` field on a result dict that may
+        already contain ``_units`` from an earlier step in a chain. Keys present
+        in ``new`` overwrite the upstream value (the calc emitting them owns the
+        unit string for those fields).
+
+        Args:
+            prev: The upstream result dict (or its ``_units`` value), or ``None``.
+            new: The units this calc is contributing.
+
+        Returns:
+            A merged dict suitable for use as the ``_units`` field.
+        """
+        base: dict = prev.get("_units", prev) if isinstance(prev, dict) else {}
+        return {**base, **new}
+
+    def _check_and_prelax(
+        self,
+        structure: Structure | Atoms,
+        result: dict[str, Any],
+        **relax_kwargs: Any,
+    ) -> tuple[dict[str, Any], Structure | Atoms]:
+        """Optionally relax ``structure`` and merge the relaxation result.
+
+        Centralises the ``if self.relax_structure: ... else ...`` pattern shared
+        by most property calculators. Honors ``self.relax_structure``; when False
+        (or absent), the input is returned unchanged.
+
+        Constructs a fresh ``RelaxCalc`` using ``self.calculator`` and the
+        merged kwargs each call. Callers that need to reuse a relaxer for
+        downstream relaxations (deformed cells, elemental references, ...)
+        should hold their own ``RelaxCalc`` instance and use it directly.
+
+        Args:
+            structure: Input structure (already extracted from the result dict).
+            result: The current result dict; relaxation outputs are merged in.
+            **relax_kwargs: Forwarded to ``RelaxCalc``. ``relax_calc_kwargs``
+                on the subclass (if any) takes precedence over these, mirroring
+                the existing per-calc convention.
+
+        Returns:
+            ``(result, structure)`` — both updated when a relaxation ran, both
+            unchanged otherwise.
+
+        Raises:
+            RuntimeError: If the pre-relaxation did not converge within
+                ``max_steps``. Downstream property calculations (elastic
+                constants, EOS, phonons, ...) sample the PES around what is
+                meant to be an equilibrium structure; running them on an
+                unrelaxed structure yields physically meaningless numbers, so
+                the chain is aborted rather than propagating bad inputs.
+        """
+        if not getattr(self, "relax_structure", False):
+            return result, structure
+        # Lazy import: RelaxCalc imports from _base, so we can't import it
+        # at module scope without a circular import.
+        from ._relaxation import RelaxCalc
+
+        extra = getattr(self, "relax_calc_kwargs", None) or {}
+        relaxer = RelaxCalc(self.calculator, **{**relax_kwargs, **extra})
+        relax_result = relaxer.calc(structure)
+        if not relax_result.get("is_converged", True):
+            raise RuntimeError(
+                f"Pre-relaxation did not converge: max|F| = {relax_result['max_force']:.4g} eV/A "
+                f"> fmax = {relaxer.fmax:.4g} eV/A after {relaxer.max_steps} steps. "
+                "Subsequent property calculations assume an equilibrium structure and would "
+                "produce unreliable results; increase max_steps, loosen fmax, or relax the "
+                "structure separately before passing it in."
+            )
+        merged = {**result, **relax_result}
+        return merged, relax_result["final_structure"]
 
     @abc.abstractmethod
     def calc(self, structure: Structure | Atoms | dict[str, Any]) -> dict[str, Any]:
@@ -90,7 +170,9 @@ class PropCalc(abc.ABC):
         """
         if isinstance(structure, dict):
             if "final_structure" in structure:
-                return structure
+                # Return a shallow copy so downstream ``result |= {...}`` updates
+                # do not mutate the caller's input dict.
+                return dict(structure)
             if "structure" in structure:
                 return structure | {"final_structure": structure["structure"]}
 
@@ -116,35 +198,26 @@ class PropCalc(abc.ABC):
         `None` for those structures, without raising exceptions.
 
         Args:
-            structures (Sequence[Structure | dict[str, Any] | Atoms]): A sequence of structures
-                to be processed. Each structure can be represented as `Structure`, a dictionary
-                containing structure-related data, or `Atoms`.
-            n_jobs (None | int, optional): The number of jobs to use for parallel processing. If
-                `None`, the default parallelism settings of the `Parallel` utility will be used.
-                Defaults to `None`.
-            allow_errors (bool, optional): If `True`, exceptions encountered during the
-                calculation of a structure will be caught, and `None` will be returned for that
-                structure. If `False`, the exception is raised. Defaults to `False`.
-            **kwargs (Any): Additional keyword arguments to pass to the `Parallel` utility.
+            structures: Sequence of structures or structure dicts.
+            n_jobs: ``joblib`` worker count; ``None`` uses joblib defaults.
+            allow_errors: If True, failed structures yield ``None`` instead of raising.
+            **kwargs: Forwarded to ``joblib.Parallel``.
 
-        Returns:
-            Generator[dict | None, None, None]: A generator that yields the results of the
-                calculations for the input structures. If an exception occurs and `allow_errors`
-                is `True`, `None` will be yielded for the corresponding structure.
+        Yields:
+            Result dict from ``calc``, or ``None`` when ``allow_errors`` and a structure fails.
 
         Raises:
-            Exception: If any error occurs during the calculation of a structure and
-                `allow_errors` is `False`, the exception will be raised.
+            Exception: Any error from ``calc`` when ``allow_errors`` is False.
         """
         parallel = Parallel(n_jobs=n_jobs, return_as="generator", **kwargs)
 
         def _func(s: Structure | Atoms) -> dict | None:
             try:
                 return self.calc(s)
-            except Exception as ex:
+            except Exception:
                 if allow_errors:
                     return None
-                raise ex  # noqa:TRY201
+                raise
 
         return parallel(delayed(_func)(s) for s in structures)
 
@@ -152,9 +225,10 @@ class PropCalc(abc.ABC):
 class ChainedCalc(PropCalc):
     """A chained calculator that runs a series of PropCalcs on a structure or set of structures.
 
-    Often, you may want to obtain multiple properties at once, e.g., perform a relaxation with a formation energy
-    computation and a elasticity calculation. This can be done using this class by supplying a list of calculators.
-    Note that it is likely
+    Often, you may want to obtain multiple properties at once, e.g., perform a relaxation followed by a formation
+    energy computation and an elasticity calculation. This can be done by supplying a list of calculators. Each
+    calculator receives the full result dict from the previous step, so downstream calculators can skip redundant
+    relaxations by setting ``relax_structure=False``.
     """
 
     def __init__(self, prop_calcs: Sequence[PropCalc]) -> None:
@@ -176,7 +250,7 @@ class ChainedCalc(PropCalc):
                 by an elasticity calculation.
 
         Returns:
-            dict[str, Any]: In the form {"prop_name": value}.
+            Merged dict from all steps (final keys depend on the chain).
         """
         results = structure  # type:ignore[assignment]
         for prop_calc in self.prop_calcs:

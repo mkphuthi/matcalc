@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from pymatgen.analysis.interfaces.coherent_interfaces import CoherentInterfaceBuilder
-from pymatgen.analysis.structure_matcher import StructureMatcher
+from pymatgen.core.structure_matcher import StructureMatcher
 
 from ._base import PropCalc
 from ._relaxation import RelaxCalc
@@ -48,7 +48,7 @@ class InterfaceCalc(PropCalc):
             optimizer (str | Optimizer, optional): The optimization algorithm to use. Defaults to "BFGS".
             max_steps (int, optional): The maximum number of optimization steps. Defaults to 500.
             relax_calc_kwargs: Additional keyword arguments passed to the
-            class:`RelaxCalc` constructor for both bulk and interface. Default is None.
+                :class:`RelaxCalc` constructor for both bulk and interface. Default is None.
 
         Returns:
             None
@@ -222,22 +222,36 @@ class InterfaceCalc(PropCalc):
         matrix = interface.lattice.matrix
         area = float(np.linalg.norm(np.cross(matrix[0], matrix[1])))
 
-        unique_in_film = set(film_structure.symbol_set) - set(substrate_structure.symbol_set)
-        unique_in_substrate = set(substrate_structure.symbol_set) - set(film_structure.symbol_set)
-
-        if unique_in_film:
-            unique_element = next(iter(unique_in_film))
-            count = film_structure.composition[unique_element]
-            film_in_interface = (interface.composition[unique_element] / count) * film_structure.num_sites
-            substrate_in_interface = interface.num_sites - film_in_interface
-        elif unique_in_substrate:
-            unique_element = next(iter(unique_in_substrate))
-            count = substrate_structure.composition[unique_element]
-            substrate_in_interface = (interface.composition[unique_element] / count) * substrate_structure.num_sites
-            film_in_interface = interface.num_sites - substrate_in_interface
+        # Prefer pymatgen's per-site film/substrate indices when available
+        # (this is the only reliable signal for alloys / shared compositions).
+        film_indices = getattr(interface, "film_indices", None)
+        substrate_indices = getattr(interface, "substrate_indices", None)
+        if film_indices is not None and substrate_indices is not None:
+            film_in_interface = float(len(film_indices))
+            substrate_in_interface = float(len(substrate_indices))
         else:
-            msg = "No unique elements found in either structure to determine atom counts in interface."
-            raise ValueError(msg)
+            unique_in_film = set(film_structure.symbol_set) - set(substrate_structure.symbol_set)
+            unique_in_substrate = set(substrate_structure.symbol_set) - set(film_structure.symbol_set)
+
+            if unique_in_film:
+                unique_element = next(iter(unique_in_film))
+                count = film_structure.composition[unique_element]
+                film_in_interface = (interface.composition[unique_element] / count) * film_structure.num_sites
+                substrate_in_interface = interface.num_sites - film_in_interface
+            elif unique_in_substrate:
+                unique_element = next(iter(unique_in_substrate))
+                count = substrate_structure.composition[unique_element]
+                substrate_in_interface = (interface.composition[unique_element] / count) * substrate_structure.num_sites
+                film_in_interface = interface.num_sites - substrate_in_interface
+            else:
+                msg = (
+                    "Could not determine film vs. substrate atom counts: the interface object "
+                    "does not expose film_indices / substrate_indices and the two structures "
+                    "share their full elemental set. Pass a pymatgen Interface with film_indices "
+                    "set (built via CoherentInterfaceBuilder) or supply pre-computed energies "
+                    "via film_energy_per_atom / substrate_energy_per_atom."
+                )
+                raise ValueError(msg)
 
         gamma = (
             interface_energy

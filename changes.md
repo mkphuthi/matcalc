@@ -6,6 +6,60 @@ nav_order: 2
 
 # Change Log
 
+## v0.5.1
+1. CI hygiene: drop `dgl` install pin from all GitHub Actions workflows (matgl now resolves its own backend); fix `release.yml` permissions/`secrets: inherit` so the reusable `test.yml` call satisfies the subset rule and PyPI trusted publishing works.
+
+## v0.5.0
+1. **`RelaxCalc` convergence checks.**
+   - `RelaxCalc.calc` surfaces `is_converged` and `max_force` in its result dict.
+   - `PropCalc._prerelax` raises `RuntimeError` when the pre-relaxation fails to converge, instead of silently feeding an unrelaxed structure into downstream property calcs.
+   - `RelaxCalc` now copies the structure before perturbing, eliminating a caller-mutation hazard.
+2. **PR #218 Extract `PropCalc._prerelax` helper; fold relax boilerplate** by @shyuep
+   - Centralises the `if self.relax_structure: relaxer = RelaxCalc(...); result |= relaxer.calc(structure); structure = result['final_structure']` pattern duplicated across `_phonon3`, `_eos`, `_qha`, `_md`, `_stability`, and `_elasticity`.
+3. **PR #210 / #85 Fix `youngs_modulus` and add `_units` metadata across all `PropCalc`s** by @shyuep
+   - Self-consistent `youngs_modulus` computation; every `PropCalc` result now carries a `_units` dict, with assertions in the test suite.
+4. **`Phonon3Calc` adapted to the new phono3py conductivity API.**
+5. **Foundation potential model naming unified.** UMA model names updated to match FAIRChem upstream; CHGNet alias typo fixed; small registry cleanups.
+
+## v0.4.8
+1. Updated the Hugging Face organization to `materialyze` (lower case).
+
+## v0.4.7
+1. **`ElasticityCalc` can now return moduli in GPa.**
+   - Added a new `units_GPa` keyword argument (default `False`). When set to `True`, the returned `elastic_tensor`, `bulk_modulus_vrh`, `shear_modulus_vrh`, and `residuals_sum` are converted from pymatgen's native eV/A^3 units to GPa.
+2. **Bug fix in `EOSCalc`.**
+   - Fixed a variable shadowing issue where the loop-local relaxation result was overwriting the outer merged `result` dict, causing the merged relaxation/structure fields returned by `EOSCalc.calc` to come from a strained calculation rather than the originally relaxed input structure.
+
+## v0.4.6
+1. **PR #199 Add `GBCalc` Class for Grain Boundary Calculation** (originally PR #111)
+   - Author: @rul048
+   - Description: Adds `GBCalc` for generating grain boundary structures and computing grain boundary energies, complementing the existing `SurfaceCalc` and `InterfaceCalc` classes.
+2. **PR #203 Multiple pressure support in `QHACalc`**
+   - Author: @Andrew-S-Rosen
+   - Description: Adds support for evaluating multiple pressures in the quasi-harmonic approximation workflow.
+3. **PR #174, #176, #163 Phonon and QHA refactor**
+   - Author: @Andrew-S-Rosen
+   - Description: Significant refactor of `PhononCalc` and `QHACalc` for clearer logic, more consistent relaxation settings, better error handling, and improved typing.
+   - Description: Adds detection and improved handling of imaginary phonon modes.
+   - Description: Fixes `PhononCalc` handling of `Atoms` inputs and supercell generation, and exposes a `min_length` kwarg for supercell sizing.
+   - Description: Allows users to toggle `symprec` in `Phonopy` calls and sets `primitive_matrix="auto"` by default.
+4. **PR #158 Consistent relaxation settings in `QHACalc`**
+   - Author: @Andrew-S-Rosen
+   - Description: Relaxes atomic positions in the QHA workflow and ensures consistent settings between relaxations.
+5. **PR #179 Allow fixing symmetry or specific atoms during relaxation**
+   - Author: @rul048
+   - Description: Adds support in `RelaxCalc` for fixing symmetry or specifying particular atoms to be held fixed during relaxation.
+6. **PR #161 / #206 Better handling when relaxations hit max steps**
+    - Author: @Andrew-S-Rosen
+    - Description: Logs (instead of warning) when a relaxation reaches its maximum step count, making the behavior easier to track in long-running workflows.
+7. **PR #189 Remove upper triangular cell call in NVT ensemble**
+    - Author: @Andrew-S-Rosen
+    - Description: Avoids unnecessary cell transformation in `MDCalc` NVT runs.
+8. **PR #136 Default NEB method to `improvedtangent`**
+    - Author: @rul048
+    - Description: Changes the default NEB method to `improvedtangent` for more reliable minimum energy paths.
+9. Replaced the custom `TrajectoryObserver` with ASE's native trajectory observer.
+
 ## v0.4.5
 1. **PR #117 Add `InterfaceCalc` Class for Interface Structure and Energy Calculation**
    - Author: @so2koo

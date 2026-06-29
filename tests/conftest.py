@@ -81,7 +81,7 @@ def Cu_supercell(Cu: Structure) -> Structure:
 @pytest.fixture(scope="session")
 def matpes_calculator() -> PESCalculator:
     """TensorNet calculator as session-scoped fixture."""
-    return matcalc.load_fp("TensorNet-MatPES-PBE-v2025.1-PES")
+    return matcalc.load_fp("TensorNet-MatPES-PBE-2025.2")
 
 
 @pytest.fixture(scope="session")

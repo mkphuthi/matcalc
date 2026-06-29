@@ -8,7 +8,7 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pprint import pprint
 
 import requests
@@ -87,7 +87,7 @@ def make_docs(ctx: Context):
         ctx.run("mv html/modules.html .")
 
         ctx.run("rm -r html", warn=True)
-        ctx.run('sed -I "" "s/_static/assets/g" matcalc*.html')
+        ctx.run('sed -i "s/_static/assets/g" matcalc*.html')
         ctx.run("rm -rf doctrees", warn=True)
 
         ctx.run("cp ../README.md index.md")
@@ -127,7 +127,7 @@ def release(ctx: Context):  # noqa: ARG001
         "prerelease": False,
     }
     response = requests.post(
-        "https://api.github.com/repos/materialsvirtuallab/matcalc/releases",
+        "https://api.github.com/repos/materialyzeai/matcalc/releases",
         data=json.dumps(payload),
         headers={"Authorization": "token " + os.environ["GITHUB_RELEASES_TOKEN"]},
         timeout=10,
@@ -165,7 +165,7 @@ def update_changelog(ctx: Context, version: str | None = None, *, dry_run: bool 
         dry_run (bool, optional): If True, the function will only print the changes without
             updating the actual change log file. Defaults to False.
     """
-    version = version or f"{datetime.now(tz=timezone.utc):%Y.%-m.%-d}"
+    version = version or f"{datetime.now(tz=UTC):%Y.%-m.%-d}"
     lastver = get_last_version()
     print(f"Getting all comments since {lastver}")
     output = subprocess.check_output(["git", "log", "--pretty=format:%s", f"v{lastver}..HEAD"])
@@ -177,7 +177,7 @@ def update_changelog(ctx: Context, version: str | None = None, *, dry_run: bool 
             pr_number = re_match[1].strip()
             print(f"Processing PR#{pr_number}")
             response = requests.get(
-                f"https://api.github.com/repos/materialsvirtuallab/matcalc/pulls/{pr_number}",
+                f"https://api.github.com/repos/materialyzeai/matcalc/pulls/{pr_number}",
                 timeout=60,
             )
             resp = response.json()

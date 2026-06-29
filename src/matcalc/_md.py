@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+import os
+import tempfile
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from ase import Atoms, units
+from ase.io import read as ase_read
+from ase.io.trajectory import TrajectoryWriter
 from ase.md import Langevin
 from ase.md.andersen import Andersen
 from ase.md.bussi import Bussi
@@ -17,13 +21,9 @@ from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 from ase.md.verlet import VelocityVerlet
 
 from ._base import PropCalc
-from ._relaxation import RelaxCalc
-from .backend._ase import TrajectoryObserver
 from .utils import to_ase_atoms, to_pmg_structure
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from ase.calculators.calculator import Calculator
     from pymatgen.core import Structure
 
@@ -80,6 +80,7 @@ class MDCalc(PropCalc):
         fmax: float = 0.1,
         optimizer: str = "FIRE",
         frames: int | None = None,
+        equilibration_frames: int = 0,
         relax_calc_kwargs: dict | None = None,
         set_com_stationary: bool = False,
         set_zero_rotation: bool = False,
@@ -125,8 +126,11 @@ class MDCalc(PropCalc):
             relax_structure (bool): Whether to relax the input structure before MD simulation. Default to True.
             fmax (float): Maximum force tolerance for structure relaxation (in eV/Å). Default to 0.1.
             optimizer (str): Optimizer used for structure relaxation. Default to "FIRE".
-            frames (int): Number of MD frames for analysis. Default to None, which means all frames will be
-            returned, i.e., frames = steps.
+            frames (int): Number of trailing MD frames to average energies over. Default to None,
+                which means all frames (i.e. frames = steps).
+            equilibration_frames (int): Skip this many leading frames before the trailing
+                ``frames`` window. Use this to discard non-equilibrated state at the start of an MD
+                run. Default 0.
             relax_calc_kwargs (dict | None): Additional keyword arguments for the relaxation calculation.
                 Default to None.
             set_com_stationary (bool): Whether to set the center-of-mass momentum to zero after setting up the
@@ -163,6 +167,7 @@ class MDCalc(PropCalc):
         self.fmax = fmax
         self.optimizer = optimizer
         self.frames = frames if frames is not None else self.steps
+        self.equilibration_frames = equilibration_frames
         self.relax_calc_kwargs = relax_calc_kwargs
         self.set_com_stationary = set_com_stationary
         self.set_zero_rotation = set_zero_rotation
@@ -190,22 +195,17 @@ class MDCalc(PropCalc):
             return VelocityVerlet(
                 atoms,
                 timestep_fs,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble in ("nvt", "nvt_nose_hoover"):
-            self._upper_triangular_cell(atoms)
             return NoseHooverChainNVT(
                 atoms,
                 timestep_fs,
                 tdamp=taut,
                 temperature_K=self.temperature,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "nvt_berendsen":
             return NVTBerendsen(
@@ -213,10 +213,8 @@ class MDCalc(PropCalc):
                 timestep_fs,
                 temperature_K=self.temperature,
                 taut=taut,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "nvt_langevin":
             return Langevin(
@@ -224,10 +222,8 @@ class MDCalc(PropCalc):
                 timestep_fs,
                 temperature_K=self.temperature,
                 friction=self.friction,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "nvt_andersen":
             return Andersen(
@@ -235,10 +231,8 @@ class MDCalc(PropCalc):
                 timestep_fs,
                 temperature_K=self.temperature,
                 andersen_prob=self.andersen_prob,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "nvt_bussi":
             return Bussi(
@@ -246,10 +240,8 @@ class MDCalc(PropCalc):
                 timestep_fs,
                 temperature_K=self.temperature,
                 taut=taut,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble in ("npt", "npt_nose_hoover"):
             self._upper_triangular_cell(atoms)
@@ -260,10 +252,8 @@ class MDCalc(PropCalc):
                 externalstress=external_stress,  # type: ignore[arg-type]
                 ttime=self.ttime * units.fs,
                 pfactor=self.pfactor * units.fs,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
                 mask=mask,
             )
         if ensemble == "npt_berendsen":
@@ -275,10 +265,8 @@ class MDCalc(PropCalc):
                 taut=taut,
                 taup=taup,
                 compressibility_au=self.compressibility_au,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "npt_inhomogeneous":
             return Inhomogeneous_NPTBerendsen(
@@ -289,10 +277,8 @@ class MDCalc(PropCalc):
                 taut=taut,
                 taup=taup,
                 compressibility_au=self.compressibility_au,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "npt_mtk":
             return MTKNPT(
@@ -306,10 +292,8 @@ class MDCalc(PropCalc):
                 pchain=self.pchain,
                 tloop=self.tloop,
                 ploop=self.ploop,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
         if ensemble == "npt_isotropic_mtk":
             return IsotropicMTKNPT(
@@ -323,10 +307,8 @@ class MDCalc(PropCalc):
                 pchain=self.pchain,
                 tloop=self.tloop,
                 ploop=self.ploop,
-                trajectory=self.trajfile,
                 logfile=self.logfile,
                 loginterval=self.loginterval,
-                append_trajectory=self.append_trajectory,
             )
 
         raise ValueError(
@@ -370,30 +352,24 @@ class MDCalc(PropCalc):
             structure (Structure | Atoms | dict[str, Any]): Input structure as a Structure instance or a dictionary.
 
         Returns:
-            dict: A dictionary containing the final energy and the final atomic configuration.
-                  It includes the keys "final_structure" and "energy".
+            dict: A dictionary with ``final_structure``, ``trajectory`` (list of ASE Atoms),
+                ``potential_energy`` (eV), ``kinetic_energy`` (eV), ``total_energy`` (eV)
+                averaged over the last ``frames`` frames, ``_units`` mapping each numeric
+                output to its unit string, plus any relaxation fields merged in.
         """
         # Preprocess the input structure using the superclass's calc method.
         # This initial processing returns a dictionary containing a "final_structure".
         result = super().calc(structure)
-        structure_in: Structure = result["final_structure"]
-
-        # If structure relaxation is enabled, relax the structure (atoms only) before the MD simulation.
-        if self.relax_structure:
-            # Create a RelaxCalc instance with the specified calculator, convergence criteria (fmax),
-            # optimizer, and any additional keyword arguments for the relaxation calculation.
-            merged_relax_calc_kwargs = {
-                "fmax": self.fmax,
-                "optimizer": self.optimizer,
-                "relax_atoms": True,
-                "relax_cell": False,
-            } | (self.relax_calc_kwargs or {})
-
-            relaxer = RelaxCalc(self.calculator, **merged_relax_calc_kwargs)
-            # Run the relaxation calculation and update the result dictionary.
-            result |= relaxer.calc(structure_in)
-            # Update the input structure with the relaxed final structure.
-            structure_in = result["final_structure"]
+        # If structure relaxation is enabled, relax the structure (atoms only,
+        # fixed cell) before the MD simulation.
+        result, structure_in = self._check_and_prelax(
+            result["final_structure"],
+            result,
+            fmax=self.fmax,
+            optimizer=self.optimizer,
+            relax_atoms=True,
+            relax_cell=False,
+        )
 
         # Convert the structure to an ASE atoms object,
         # which is required for subsequent molecular dynamics (MD) simulation.
@@ -412,28 +388,42 @@ class MDCalc(PropCalc):
         # Initialize the molecular dynamics (MD) simulation and set up the simulation parameters.
         md = self._initialize_md(atoms)
 
-        # Attach a callback to the MD simulation to record the atoms' state at intervals defined by self.loginterval.
-        traj = TrajectoryObserver(atoms)
-        md.attach(traj, interval=self.loginterval)
+        # Set up ASE native Trajectory as observer, writing frames at loginterval steps.
+        use_temp = self.trajfile is None
+        if use_temp:
+            with tempfile.NamedTemporaryFile(suffix=".traj", delete=False) as tmp_file:
+                traj_path = tmp_file.name
+        else:
+            traj_path = str(self.trajfile)
 
-        # Run the MD simulation for the specified number of steps.
-        md.run(self.steps)
-        final_atoms = Atoms(
-            traj.atoms.get_chemical_symbols(),
-            positions=traj.atom_positions[-1],
-            cell=traj.cells[-1],
-            pbc=traj.atoms.get_pbc(),
-        )
-        result["final_structure"] = to_pmg_structure(final_atoms)
+        mode = "a" if self.append_trajectory else "w"
+        with TrajectoryWriter(traj_path, mode, atoms) as ase_traj:
+            md.attach(ase_traj.write, interval=self.loginterval)
+            # Run the MD simulation for the specified number of steps.
+            md.run(self.steps)
 
-        traj = traj.get_slice(slice(-self.frames, len(traj), 1))
+        # Read back all frames.
+        all_frames = ase_read(traj_path, index=":")
 
-        # Calculate the average potential energy over the selected frames.
-        energy_pot = sum(traj.potential_energies) / self.frames
-        # Calculate the average kinetic energy over the selected frames.
-        energy_kin = sum(traj.kinetic_energies) / self.frames
-        # Calculate the average total energy (potential + kinetic) over the selected frames.
-        energy_tot = sum(traj.total_energies) / self.frames
+        if use_temp:
+            os.unlink(traj_path)
+
+        result["final_structure"] = to_pmg_structure(all_frames[-1])  # type: ignore[arg-type]
+
+        # Drop equilibration_frames from the start, then take the trailing ``frames`` window.
+        eq_skipped = all_frames[self.equilibration_frames :] if self.equilibration_frames else all_frames
+        traj = eq_skipped[-self.frames :]
+        n_avg = len(traj)
+        if n_avg == 0:
+            raise ValueError(
+                f"No frames left to average after dropping {self.equilibration_frames=} "
+                f"and taking the last {self.frames=}; got {len(all_frames)} total frames."
+            )
+
+        # Calculate the average potential, kinetic and total energies over the selected window.
+        energy_pot = sum(a.get_potential_energy() for a in traj) / n_avg
+        energy_kin = sum(a.get_kinetic_energy() for a in traj) / n_avg
+        energy_tot = sum(a.get_total_energy() for a in traj) / n_avg
 
         # Update the result dictionary with the simulation trajectory and computed energy.
         result |= {
@@ -441,6 +431,12 @@ class MDCalc(PropCalc):
             "potential_energy": energy_pot,
             "kinetic_energy": energy_kin,
             "total_energy": energy_tot,
+            "_units": {
+                **result.get("_units", {}),
+                "potential_energy": "eV",
+                "kinetic_energy": "eV",
+                "total_energy": "eV",
+            },
         }
 
         # Return the complete result dictionary.

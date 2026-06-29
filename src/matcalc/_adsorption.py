@@ -1,4 +1,4 @@
-"""Surface Energy calculations."""
+"""Adsorption energy calculations on surfaces."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from copy import copy
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from pymatgen.analysis.adsorption import AdsorbateSiteFinder
 from pymatgen.core import Structure
+from pymatgen.core.adsorption import AdsorbateSiteFinder
 from pymatgen.core.surface import Slab, SlabGenerator
 
 from ._base import PropCalc
@@ -27,32 +27,10 @@ if TYPE_CHECKING:
 
 class AdsorptionCalc(PropCalc):
     """
-    Calculator for adsorption energies on surfaces.
-    Combines bulk relaxation, slab generation and relaxation, adsorbate
-    relaxation, and adsorption energy calculations.
-    Uses :class:`RelaxCalc` for structure relaxations.
-    Parameters allow control over which parts are relaxed and how.
+    Adsorption energies on surfaces via bulk, slab, adsorbate, and adslab relaxations.
 
-    :param calculator: An ASE calculator object used to perform energy and force
-        calculations. If string is provided, the corresponding universal calculator is loaded.
-    :type calculator: Calculator | str
-    :param relax_adsorbate: Whether to relax the adsorbate structure. If note relaxed,
-        a single point or the adsorbate energy provided downstream is used. Default is True.
-    :type relax_adsorbate: bool, optional
-    :param relax_slab: Whether to relax each clean slab structure (cell fixed). Default is True.
-    :type relax_slab: bool, optional
-    :param relax_bulk: Whether to relax the bulk structure used to generate slabs, including its cell. Default is True.
-    :type relax_bulk: bool, optional
-    :param fmax: Force tolerance in eV/Å for relaxation. Default is 0.1.
-    :type fmax: float, optional
-    :param optimizer: The ASE optimizer to usein RelaxCalc. Can be a string (e.g. "BFGS") or
-        an :class:`Optimizer` instance. Default is "BFGS".
-    :type optimizer: str | Optimizer, optional
-    :param max_steps: Maximum number of optimization steps for relaxation. Default is 500.
-    :type max_steps: int, optional
-    :param relax_calc_kwargs: Additional keyword arguments passed to the
-        :class:`RelaxCalc` constructor for both bulk and slabs. Default is None.
-    :type relax_calc_kwargs: dict | None, optional
+    Uses ``RelaxCalc`` for geometry optimizations. Attributes mirror constructor arguments
+    plus optional cached bulk state after ``calc_bulk`` / ``calc_adslabs``.
     """
 
     def __init__(
@@ -65,30 +43,23 @@ class AdsorptionCalc(PropCalc):
         fmax: float = 0.1,
         optimizer: str | Optimizer = "BFGS",
         max_steps: int = 500,
+        adsorbate_vacuum_size: float = 15.0,
         relax_calc_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """
-        Initialize the AdsorptionCalc.
-
-        :param calculator: An ASE calculator object used to perform energy and force
-            calculations. If string is provided, the corresponding universal calculator is loaded.
-        :type calculator: Calculator | str
-        :param relax_adsorbate: Whether to relax the adsorbate structure. Default is True.
-        :type relax_adsorbate: bool, optional
-        :param relax_slab: Whether to relax each slab structure (cell fixed). Default is True.
-        :type relax_slab: bool, optional
-        :param relax_bulk: Whether to relax the bulk structure, including its cell. Default is True.
-        :type relax_bulk: bool, optional
-        :param fmax: Force tolerance in eV/Å for relaxation. Default is 0.1.
-        :type fmax: float, optional
-        :param optimizer: The ASE optimizer to use. Can be a string (e.g. "BFGS") or
-            an :class:`Optimizer` instance. Default is "BFGS".
-        :type optimizer: str | Optimizer, optional
-        :param max_steps: Maximum number of optimization steps for relaxation. Default is 500.
-        :type max_steps: int, optional
-        :param relax_calc_kwargs: Additional keyword arguments passed to the
-            :class:`RelaxCalc` constructor for both bulk and slabs. Default is None.
-        :type relax_calc_kwargs: dict | None, optional
+        Args:
+            calculator: ASE calculator or universal model name string.
+            relax_adsorbate: Relax isolated adsorbate in a box when True.
+            relax_slab: Relax clean slab (fixed cell) when True.
+            relax_bulk: Relax bulk with cell when True.
+            fmax: Force tolerance (eV/Å).
+            optimizer: ASE optimizer name or class.
+            max_steps: Max relaxation steps.
+            adsorbate_vacuum_size: Padding (Å) added on each side of the adsorbate's
+                bounding box when building the isolated-adsorbate relaxation cell.
+                Increase for large or charged adsorbates to avoid spurious
+                image-image interactions. Default 15.
+            relax_calc_kwargs: Optional kwargs for ``RelaxCalc``.
         """
         self.calculator = calculator  # type: ignore[assignment]
         self.relax_adsorbate = relax_adsorbate
@@ -97,6 +68,7 @@ class AdsorptionCalc(PropCalc):
         self.fmax = fmax
         self.optimizer = optimizer
         self.max_steps = max_steps
+        self.adsorbate_vacuum_size = adsorbate_vacuum_size
         self.relax_calc_kwargs = relax_calc_kwargs
 
         self.final_bulk: Structure | None = None
@@ -109,15 +81,12 @@ class AdsorptionCalc(PropCalc):
         bulk_energy: float | None = None,
     ) -> dict[str, Any]:
         """
-        Prepare the bulk structure for slab generation, optionally relaxing it.
+        Args:
+            bulk: Bulk pymatgen structure or ASE atoms.
+            bulk_energy: If ``relax_bulk`` is False and this is set, used as energy; else relaxed.
 
-        :param bulk: The bulk structure to be calculated.
-        :type bulk: Structure | Atoms
-        :param bulk_energy: Optional pre-calculated energy of the bulk. If not provided,
-            the bulk will be relaxed and its energy calculated.
-        :type bulk_energy: float | None, optional
-        :return: A dictionary containing the bulk energy and final structure.
-        :rtype: dict[str, Any]
+        Returns:
+            Dict with ``final_structure`` and ``energy`` (when available).
         """
         initial_bulk = to_pmg_structure(bulk)
 
@@ -147,12 +116,12 @@ class AdsorptionCalc(PropCalc):
         adsorbate_energy: float | None = None,
     ) -> dict[str, Any]:
         """
-        Calculate the energy of the adsorbate, optionally relaxing it.
+        Args:
+            adsorbate: Adsorbate as molecule or atoms.
+            adsorbate_energy: Optional fixed energy; otherwise from calculator on final geometry.
 
-        :param adsorbate: The adsorbate structure to be calculated.
-        :type adsorbate: Molecule | Atoms
-        :return: A dictionary containing the adsorbate energy and final structure.
-        :rtype: dict[str, Any]
+        Returns:
+            Dict with ``adsorbate_energy``, ``adsorbate``, ``final_adsorbate``.
         """
         initial_adsorbate = to_pmg_molecule(adsorbate)
 
@@ -168,8 +137,11 @@ class AdsorptionCalc(PropCalc):
             )
 
             adsorbate = to_ase_atoms(adsorbate)
-            # Add 15 Å of vacuum in all directions for relaxation
-            adsorbate.set_cell(np.max(adsorbate.positions, axis=0) - np.min(adsorbate.positions, axis=0) + 15)
+            # Pad the adsorbate's bounding box by ``adsorbate_vacuum_size`` Å on each
+            # axis to suppress image-image interactions during the isolated relaxation.
+            adsorbate.set_cell(
+                np.max(adsorbate.positions, axis=0) - np.min(adsorbate.positions, axis=0) + self.adsorbate_vacuum_size
+            )
             adsorbate_opt = relaxer.calc(adsorbate)
         else:
             adsorbate_opt = {
@@ -196,15 +168,12 @@ class AdsorptionCalc(PropCalc):
         slab_energy: float | None = None,
     ) -> dict[str, Any]:
         """
-        Calculate the energy of the slab, optionally relaxing it.
+        Args:
+            slab: Slab structure or atoms.
+            slab_energy: Optional total slab energy; if None, taken from calculator.
 
-        :param slab: The slab structure to be calculated.
-        :type slab: Structure | Atoms
-        :param slab_energy: Optional pre-calculated energy of the slab. If not provided,
-            the slab will be relaxed and its energy calculated.
-        :type slab_energy: float | None, optional
-        :return: A dictionary containing the slab energy and final structure.
-        :rtype: dict[str, Any]
+        Returns:
+            Dict with ``slab``, ``slab_energy``, ``slab_energy_per_atom``, ``final_slab``.
         """
         if self.relax_slab:
             relaxer = RelaxCalc(
@@ -257,53 +226,28 @@ class AdsorptionCalc(PropCalc):
         **kwargs: dict[str, Any],
     ) -> list[dict[str, Any]] | dict[Any, Any]:
         """
-        Calculate adsorption energies for adsorbates on slabs generated from a bulk structure.
-        :param adsorbate: The adsorbate structure to be placed on the slab.
-        :type adsorbate: Molecule | Atoms
-        :param bulk: The bulk structure from which slabs will be generated. Be careful
-            to provide conventional cells if that is your intention for miller indices.
-        :type bulk: Structure | Atoms
-        :param miller_index: The Miller index defining the slab orientation.
-        :type miller_index: tuple[int, int, int]
-        :param adsorbate_energy: Optional pre-calculated energy of the adsorbate. If not provided,
-            the adsorbate will be relaxed and its energy calculated.
-        :type adsorbate_energy: float | None, optional
-        :param min_slab_size: Minimum thickness of the slab in Å. Default is 10.0.
-        :type min_slab_size: float, optional
-        :param min_vacuum_size: Minimum size of the vacuum layer in Å. Default is 20.0.
-        :type min_vacuum_size: float, optional
-        :param min_area_extent: Minimum in-plane dimensions of the slab in Å. If provided,
-            the slab will be expanded to at least these dimensions in the a and perpendicular
-            to a directions by projecting the b lattice vector onto a. Default is None.
-        :type min_area_extent: tuple[float, float] | None, optional
-        :param inplane_supercell: Tuple defining the in-plane supercell size. Default is (1, 1).
-        :type inplane_supercell: tuple[int, int], optional
-        :param slab_gen_kwargs: Additional keyword arguments passed to the SlabGenerator. Default is None.
-        :type slab_gen_kwargs: dict[str, Any] | None, optional
-        :param get_slabs_kwargs: Additional keyword arguments passed to the get_slabs method of
-            SlabGenerator. Default is None.
-        :type get_slabs_kwargs: dict[str, Any] | None, optional
-        :param adsorption_sites: Either a string specifying which adsorption sites to consider
-            (e.g., "all", "ontop", "bridge", "hollow"), or a dictionary specifying custom adsorption sites
-            with site names as keys and lists of fractional coordinates as values.
-            Default is "all".
-        :type adsorption_sites: dict[str:tuple[float, float]] | str, optional
-        :param height: Height above the surface to place the adsorbate in Å. Default is 0.9.
-        :type height: float, optional
-        :param mi_vec: Optional in-plane vector defining the slab orientation. If None, it is
-            automatically determined. Default is None.
-        :type mi_vec: tuple[float, float] | None, optional
-        :param fixed_height: Height below which slab atoms are fixed during relaxation in Å.
-            Default is 5 Å.
-        :type fixed_height: float, optional
-        :param find_adsorption_sites_args: Additional keyword arguments passed to the
-            find_adsorption_sites method of AdsorbateSiteFinder. Default is None.
-        :type find_adsorption_sites_args: dict[str, Any] | None, optional
-        :param dry_run: If True, only generates the adslab structures without performing calculations.
-            Default is False.
-        :type dry_run: bool, optional
-        :return: A list of dictionaries containing results for each adslab, or just the structures if dry_run is True.
-        :rtype: list[dict[str, Any]] | dict[Any, Any].
+        Args:
+            adsorbate: Adsorbate species.
+            bulk: Bulk structure (use conventional cell if needed for Miller indices).
+            miller_index: Surface orientation.
+            adsorbate_energy: Optional fixed adsorbate energy.
+            slab_energy: Optional fixed clean-slab energy for all slabs.
+            min_slab_size: Minimum slab thickness (Å).
+            min_vacuum_size: Vacuum thickness (Å).
+            min_area_extent: Minimum in-plane extent (Å); may expand ``inplane_supercell``.
+            inplane_supercell: In-plane supercell factors.
+            slab_gen_kwargs: Kwargs for ``SlabGenerator``.
+            get_slabs_kwargs: Kwargs for ``SlabGenerator.get_slabs``.
+            adsorption_sites: ``"all"``, site name string, or custom fractional-coordinate dict.
+            height: Adsorbate height above surface (Å).
+            mi_vec: Optional in-plane vector for ``AdsorbateSiteFinder``.
+            fixed_height: Fix slab atoms below this height (Å) during relaxation.
+            find_adsorption_sites_args: Kwargs for ``find_adsorption_sites``.
+            dry_run: If True, return adslab dicts without ``calc_many``.
+            **kwargs: Forwarded to ``calc_many``.
+
+        Returns:
+            List of per-configuration results, or raw adslab dicts if ``dry_run``.
         """
         adslab_dict = {}
         bulk = to_pmg_structure(bulk)
@@ -406,14 +350,20 @@ class AdsorptionCalc(PropCalc):
         structure: dict[str, Any],  # type: ignore[override]
     ) -> dict[str, Any]:
         """
-        Calculate the adsorption energy for a given adslab structure.
+        Args:
+            structure: Dict with ``adslab``, ``slab``, ``adsorbate``; optional ``slab_energy`` /
+                ``adsorbate_energy``.
 
-        :param structure: A dictionary containing 'adslab', 'slab', and 'adsorbate' structures,
-            and optionally 'slab_energy' and/or 'adsorbate_energy'.
-        :type structure: dict[str, Any]
-        :return: A dictionary containing the adsorption energy and related information.
-        :rtype: dict[str, Any]
+        Returns:
+            Dict including ``adsorption_energy`` and merged slab/adsorbate fields.
         """
+        if not isinstance(structure, dict):
+            msg = (
+                "For adsorption calculations, structure must be a dict with keys "
+                "'adslab', 'slab', and 'adsorbate' (and optionally 'slab_energy_per_atom' "
+                "and/or 'adsorbate_energy'). Use calc_adslabs(...) to generate input dicts."
+            )
+            raise TypeError(msg)
         result_dict = structure.copy()
 
         result_dict |= self.calc_adsorbate(

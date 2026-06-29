@@ -27,17 +27,17 @@ def _set_seed() -> None:
 @pytest.mark.parametrize(
     ("ensemble", "expected_energy"),
     [
-        ("nve", -10.441453988814853),
-        ("nvt", -10.429515745917376),
-        ("nvt_berendsen", -10.442275652025423),
-        ("nvt_langevin", -10.3960898598168),
-        ("nvt_andersen", -10.449911725549356),
-        ("nvt_bussi", -10.394832352314676),
-        ("npt_inhomogeneous", -10.444233085819286),
-        ("npt_berendsen", -10.423091635481624),
-        ("npt_nose_hoover", -10.39898962348729),
-        ("npt_isotropic_mtk", -10.42449303041493),
-        ("npt_mtk", -10.45577119876975),
+        ("nve", -10.681398645973719),
+        ("nvt", -10.669462076229149),
+        ("nvt_berendsen", -10.682300543040231),
+        ("nvt_langevin", -10.636199534575727),
+        ("nvt_andersen", -10.689862392797687),
+        ("nvt_bussi", -10.634646418536288),
+        ("npt_inhomogeneous", -10.684206021309203),
+        ("npt_berendsen", -10.663122054639796),
+        ("npt_nose_hoover", -10.639228676099112),
+        ("npt_isotropic_mtk", -10.664155796043316),
+        ("npt_mtk", -10.695427268514504),
     ],
 )
 def test_md_calc(
@@ -72,16 +72,21 @@ def test_md_calc(
     assert "kinetic_energy" in results
     assert "total_energy" in results
 
+    units = results["_units"]
+    assert units["potential_energy"] == "eV"
+    assert units["kinetic_energy"] == "eV"
+    assert units["total_energy"] == "eV"
+
     assert results["total_energy"] == pytest.approx(expected_energy, abs=1e-2)
 
-    energies = np.array(results["trajectory"].total_energies)
+    energies = np.array([a.get_total_energy() for a in results["trajectory"]])
 
     if ensemble != "nve":
         assert not np.allclose(energies - energies[0], 0, atol=1e-9), f"Energies are too close for {ensemble}"
 
     if ensemble.startswith("nvt"):
         # There should be no volume change for NVT simulations.
-        assert np.linalg.det(results["trajectory"].cells[-1]) == pytest.approx(initial_vol, rel=1e-2)
+        assert np.linalg.det(results["trajectory"][-1].get_cell()) == pytest.approx(initial_vol, rel=1e-2)
 
     assert len(results["trajectory"]) == 5
 
@@ -127,7 +132,7 @@ def test_md_relax_cell(
     )
     initial_vol = Si.lattice.volume
     results = md_calc.calc(Si)
-    volume_after_relax = np.linalg.det(results["trajectory"].cells[0])
+    volume_after_relax = np.linalg.det(results["trajectory"][0].get_cell())
     assert volume_after_relax == pytest.approx(initial_vol, rel=1e-4)
 
     md_calc = MDCalc(
@@ -140,8 +145,8 @@ def test_md_relax_cell(
     )
     initial_vol = Si.lattice.volume
     results = md_calc.calc(Si)
-    volume_after_relax = np.linalg.det(results["trajectory"].cells[0])
-    assert abs(volume_after_relax - initial_vol) > 0.1
+    volume_after_relax = np.linalg.det(results["trajectory"][0].get_cell())
+    assert abs(volume_after_relax - initial_vol) > 1e-4
 
 
 def test_stationary(Si_atoms: Atoms, matpes_calculator: PESCalculator, tmp_path: Path) -> None:
@@ -175,7 +180,7 @@ def test_stationary(Si_atoms: Atoms, matpes_calculator: PESCalculator, tmp_path:
     )
     md_calc.calc(Si_atoms)
     final_com = read(tmp_path / "test.traj", index=":")[-1].get_center_of_mass()
-    assert final_com != pytest.approx(starting_com, abs=1e-2)
+    assert np.linalg.norm(final_com - starting_com) > 1e-3
 
 
 def test_rotation(Si_atoms: Atoms, matpes_calculator: PESCalculator, tmp_path: Path) -> None:

@@ -39,7 +39,7 @@ def test_lammps_calc(
     traj_file = f"{ensemble}.lammpstrj"
 
     md_calc = LAMMPSMDCalc(
-        calculator="M3GNet",
+        calculator="TensorNet",
         ensemble=ensemble,
         temperature=300,
         taut=0.1,
@@ -73,7 +73,7 @@ def test_lammps_atoms(Si_atoms: Atoms) -> None:
         script_template = f.read()
 
     md_calc = LAMMPSMDCalc(
-        calculator="M3GNet",
+        calculator="TensorNet",
         temperature=300,
         taut=0.1,
         taup=0.1,
@@ -95,7 +95,7 @@ def test_invalid_ensemble(Si: Structure) -> None:
         ),
     ):
         LAMMPSMDCalc(
-            calculator="M3GNet",
+            calculator="TensorNet",
             ensemble="you_know_who",
             temperature=300,
             taut=0.1,
